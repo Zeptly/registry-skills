@@ -1,8 +1,0 @@
-schema: zeptly.ledger/v1
-skill: zsk.competitive-intelligence
-releases:
-- version: 1.0.0
-  digest: sha256:c7e70e1fe679771ffaf9ea105d6a81e0bff5590245ed85bb4a476288c063dae0
-  contract_digest: sha256:a06f49dd0a3a2bbe4d1366b04dbec18e20bf6dce9222fcef50f4bf76724b114b
-  security_digest: sha256:b258b598d4a4f73f1fd22a7d169857321ec34d11fdb01838e96db00a35f3ea01
-  released_at: '2026-09-29'

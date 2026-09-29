@@ -1,5 +1,5 @@
 schema: zeptly.eval-suite/v1
-skill: zsk.competitive-intelligence
+skill: competitive-intelligence
 environment: {mode: recorded}
 cases:
   - id: known-saas-category

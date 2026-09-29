@@ -9,15 +9,17 @@ A Skill Blueprint is *not* a prompt snippet. It is a bundle of portable human-re
 ## Layout
 
 ```
-skills/<domain>/<name>/        canonical skills (active | deprecated | retired)
-candidates/<domain>/<name>/    proposals in flight (discovered ... approved | rejected)
+skills/<domain>/<id>/          canonical artifacts (maturity: canonical)
+candidates/<domain>/<id>/      candidate artifacts (maturity: candidate)
+synthetic/<domain>/<id>/       isolated synthetic examples (never in the production index)
   SKILL.md                     portable procedure (Agent Skills-compatible frontmatter)
-  manifest.yaml                machine-readable contract (schemas/manifest.schema.json)
+  manifest.yaml                Registry Protocol v0.1 envelope + skills spec (schemas/skill-blueprint.schema.json)
   evals/suite.yaml             evaluation cases (+ fixtures)
   examples/                    worked examples
   provenance/                  evidence refs, assessments, approvals, eval reports (append-only, outside the digest)
 registry/releases/<id>.yaml    append-only ledger: id@version -> content digest
-registry/index.json            generated discovery index (ID -> path, latest version, digests)
+registry/lifecycle/<id>.yaml   append-only lifecycle overlay (active | deprecated | revoked)
+registry/index.json            deterministic generated index (identity, version, digest, maturity, lifecycle, origin, location)
 schemas/                       JSON Schemas for every file type
 vocab/                         controlled vocabularies: domains, agent classes, capabilities
 tools/zskill/                  validator / release / promote / resolve CLI
@@ -30,7 +32,7 @@ docs/                          specification and architecture
 pip install -e '.[dev]'
 zskill validate            # everything CI checks
 zskill new research/my-skill   # scaffold a candidate
-zskill resolve zsk.competitive-intelligence   # pin a skill + its closure to exact versions/digests
+zskill resolve competitive-intelligence   # range -> exact version + digest lock
 pytest
 ```
 
@@ -38,10 +40,11 @@ pytest
 
 | Idea | Mechanism |
 |---|---|
-| Stable identity | `id: zsk.<slug>` is independent of path and domain; consumers resolve via `registry/index.json`. |
+| Stable identity | `metadata.id` + `registry: skills`; structured references `{registry, id, version, digest?}`; consumers resolve via the index, never paths. |
 | Reproducibility | Released versions are immutable; each has a `sha256` digest in the ledger. Evidence cites `id@version` + digest. |
 | Safe evolution | Improvements are new versions. Semver is *enforced* on contract/security changes. |
-| Discovery is not access | `discovered → inspected → candidate → evaluating → approved → active`. External capabilities need a recorded assessment. |
+| Independent state | `maturity` (candidate/canonical), `origin` and `lifecycle` (append-only overlay) are separate fields. Discovery never grants access; external capabilities need a recorded assessment. |
+| Digest-bound attestations | Attestations name the exact artifact digest and fail validation when stale. |
 | Two kinds of wisdom | Crowd (human) and compute (machine) evidence are referenced, never applied directly; only a reviewed PR changes a canonical skill. |
 | Composition without hiding | Skills compose other skills via bounded, acyclic, version-ranged dependencies; a composite must declare at least its children's privileges. |
 | No secrets | Manifests describe permissions and auth *requirements*; credentials are runtime-injected. CI scans for secrets. |
@@ -50,4 +53,4 @@ Read next: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md), [docs/SPECIFICATION.md]
 
 ## Status
 
-Protocol `zeptly.skill/v1`. The six seed skills ship approved **by waiver** (no executed evals yet); the index reports them as `evidence_level: unevaluated` and CI emits a warning for each until an eval harness produces reports. See [docs/OPEN-DECISIONS.md](docs/OPEN-DECISIONS.md).
+Implements Zeptly Registry Protocol v0.1 (`apiVersion: registry.zeptly.dev/v1alpha1`); see [docs/PROTOCOL-ALIGNMENT.md](docs/PROTOCOL-ALIGNMENT.md) for interpretations needing cross-registry reconciliation. Draft PR only, not merged. The six seed skills ship approved **by waiver** (no executed evals yet); the index reports them as `evidence_level: unevaluated` and CI emits a warning for each until an eval harness produces reports. See [docs/OPEN-DECISIONS.md](docs/OPEN-DECISIONS.md).

@@ -29,9 +29,9 @@ Three layers per skill:
 
 Identity and immutability:
 
-* `id` (`zsk.web-research`) is permanent. Path and domain are classification, not identity, so a skill can be re-filed without breaking any reference. `supersedes` and `deprecation.replaced_by` express merges/splits.
+* `metadata.id` (`web-research`, with `registry: skills`) is permanent. Path and domain are classification, not identity, so a skill can be re-filed without breaking any reference. `spec.compatibility.supersedes` and lifecycle-overlay `replacedBy` express merges/splits.
 * A **skill ref** is `id@semver` (exact) or `id` + range (dependencies). `id@version` + `sha256` digest is what execution evidence carries.
-* The **digest** covers `SKILL.md`, `manifest.yaml` (minus lifecycle keys), `evals/`, `examples/`. It excludes `provenance/` and `CHANGELOG.md` so evidence can accumulate *about* a version without creating a new one, and excludes `status` so deprecating a version does not change what it *is*.
+* The **digest** covers `SKILL.md`, `manifest.yaml` (minus governance state: maturity, stage, lifecycle, attestations, approvals), `evals/`, `examples/`. It excludes `provenance/` and `CHANGELOG.md` so evidence can accumulate *about* a version without creating a new one, and excludes governance state so promotion or deprecation does not change what a version *is*.
 * The **ledger** (`registry/releases/<id>.yaml`) is append-only. CI rejects modified released content and (via `zskill ledger-check`) rewritten ledger history.
 
 ## 3. Repository tree

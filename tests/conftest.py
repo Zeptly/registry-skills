@@ -20,8 +20,30 @@ def codes(root, level="error"):
     return sorted({i.code for i in validate(root) if i.level == level})
 
 
+def load(root, rel):
+    return yaml.safe_load((root / rel).read_text())
+
+
+def save(root, rel, data):
+    (root / rel).write_text(yaml.safe_dump(data, sort_keys=False))
+
+
 def edit_manifest(root, rel, fn):
-    p = root / rel / "manifest.yaml"
-    m = yaml.safe_load(p.read_text())
+    m = load(root, rel + "/manifest.yaml")
     fn(m)
-    p.write_text(yaml.safe_dump(m, sort_keys=False))
+    save(root, rel + "/manifest.yaml", m)
+
+
+def rebind(root, rel, release=True):
+    """After changing bundle content: re-issue the governance attestation/approval for the new digest
+    (what a maintainer would do), and optionally release."""
+    from zskill import registry_ops as ops
+    from zskill.validate import Registry
+    b = next(x for x in Registry(root).bundles if x.rel == rel)
+    dig = b.digest()
+    ap = load(root, rel + "/provenance/approval.yaml")
+    ap["subject"].update(version=b.version, digest=dig)
+    save(root, rel + "/provenance/approval.yaml", ap)
+    edit_manifest(root, rel, lambda m: m["security"]["approvals"][0].update(subjectDigest=dig))
+    if release and b.tier == "skills":
+        ops.release(root, b.id)

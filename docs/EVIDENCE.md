@@ -1,47 +1,49 @@
-# Evidence Reference Model
+# Evidence References
 
-Two streams feed skill improvement:
+The full Evidence Protocol (ownership, schema, transport) is deferred by Registry Protocol v0.1. This registry stores only **pointers** and digest-bound attestations.
 
-* **Wisdom of the crowd (`wisdom: crowd`)**: human corrections, preferences, best practice, incidents.
-* **Wisdom of compute (`wisdom: compute`)**: execution trajectories, failure clusters, retries, tool sequences, cost/latency, eval results.
+* **Crowd wisdom**: human corrections, preferences, best practice, incidents.
+* **Compute wisdom**: execution summaries, failure clusters, cost/latency, eval results.
 
-Neither mutates a canonical skill. Evidence is **referenced, not embedded**: raw trajectories stay in the evidence system; the registry stores small pointers in `provenance/evidence.yaml` (schema `evidence.schema.json`).
+Neither writes to a canonical skill. Raw tapes, trajectories, transcripts and sensitive runtime artifacts NEVER enter registry Git; the validator rejects them by name/extension/size, and evidence pointer URIs must be `evidence://` or `https://`.
 
 ```yaml
-schema: zeptly.evidence/v1
-skill: zsk.web-research
+apiVersion: registry.zeptly.dev/v1alpha1
+kind: EvidenceReferences
+subject: {registry: skills, id: web-research}
 refs:
-  - evidence_id: ev-cluster-2026-09-fetch-retry
+  - evidenceId: ev-cluster-2026-10-fetch-retry
     wisdom: compute
     kind: failure-cluster
-    skill_ref: zsk.web-research@1.0.0        # exact version observed
-    skill_digest: sha256:...                  # exact content observed
-    uri: agentgit://<namespace>/cluster/1234  # opaque pointer into the evidence store
-    content_digest: sha256:...                # optional integrity of the referenced artefact
-    recorded_at: 2026-10-02T09:00:00Z
-    summary: 31% of runs across 4 agent classes stall after step 3 when pages need JS rendering.
-    supports: failure-pattern                 # improvement | regression | failure-pattern | confirmation | new-skill
-    agent_classes_observed: [execution, qb, timesaver]
-    n_agents: 14
-    n_runs: 212
-    metrics: {failure_rate: 0.31}
+    subject: {registry: skills, id: web-research, version: 1.0.0, digest: "sha256:..."}   # exact artifact observed
+    uri: evidence://store/cluster/1234           # opaque pointer, resolved outside this repo
+    contentDigest: "sha256:..."                  # optional integrity of the referenced artefact
+    recordedAt: "2026-10-02T09:00:00Z"
+    summary: 31% of runs across 4 agent classes stall after step 3 when pages need JS rendering.   # <= 500 chars, no payloads
+    supports: failure-pattern
+    agentClassesObserved: [execution, qb, timesaver]
+    nAgents: 14
+    nRuns: 212
+    metrics: {failureRate: 0.31}
 ```
 
-## Why version + digest
+Stored at `provenance/evidence.yaml` (outside the digest, so evidence accumulates without new versions). `subject` is the structured reference `{registry, id, version, digest}`.
 
-Reproducibility requires knowing *exactly* what an agent was told. `skill_ref` + `skill_digest` identify the bytes; `zskill resolve` extends this to composed skills. The ledger proves the digest belonged to the version.
+## Resolution locks
+
+`declared range -> resolver -> exact version -> content digest -> runtime lock -> evidence`. `zskill resolve <id> [--range r]` produces the `ResolutionLock` (exact version + digest for the skill and its composed skills, skipping revoked versions). Runtimes record this lock in their evidence so a run can be tied to exact content. No network access to other registries is needed or attempted.
+
+## Attestations
+
+Manifest `attestations` (e.g. `evaluation`) and `security.approvals` (e.g. `governance`) bind `subjectDigest` to the exact artifact digest. In-bundle records (`bundle:provenance/...`) are eval reports and approvals whose own `subject.digest` must also match. A stale digest fails validation.
 
 ## Cross-agent learning
 
-`agent_classes_observed` / `n_agents` let a steward (Zep) distinguish "one agent misbehaved" from "the shared blueprint is at fault". A failure pattern across many independent agents is the trigger to propose a new version (MINOR/PATCH) or, if the contract must change, MAJOR.
-
-## Coupling to AgentGit
-
-None by code. `uri` is opaque (`agentgit://`, `zep://`, `https://`). Mapping guidance: AgentGit external/internal session and checkpoint identifiers, being local integers, MUST be namespaced in the URI. Branch-on-rollback histories are useful compute evidence (they show where a run diverged from the skill's procedure). Tool-revert records document reversibility, which can inform `destructive_operations.reversible`.
+`agentClassesObserved`, `nAgents`, `nRuns` let a steward distinguish a single misbehaving agent from a shared blueprint defect. Evidence never edits a skill: a reviewed PR proposing a new version does.
 
 ## Rules
 
-* Evidence files are append-only in practice (review enforces; entries have stable `evidence_id`).
-* Compute evidence on canonical skills SHOULD carry `skill_digest`.
-* `zep-generalised` candidates MUST cite at least one compute ref.
-* Never put raw prompts, personal data or credentials in evidence summaries.
+* Evidence entries are append-only in practice (stable `evidenceId`; review enforces).
+* Generalised evolutions MUST cite >= 1 compute evidence pointer.
+* No raw prompts, personal data, credentials or transcripts in summaries.
+* Evidence-store scheme names beyond `evidence://` are not defined here (deferred).

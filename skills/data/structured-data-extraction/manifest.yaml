@@ -1,41 +1,54 @@
-schema: zeptly.skill/v1
-id: zsk.structured-data-extraction
-name: structured-data-extraction
-title: Structured Data Extraction
-description: Extract fields from unstructured or semi-structured documents into a schema-conforming record with per-field evidence and confidence. Use when text, PDFs or HTML must become validated structured data.
-domain: data
-version: 1.0.0
-status: active
-tags: [data, extraction, documents]
-authorship:
-  authors:
-    - {name: Zeptly, kind: organisation}
-  maintainers: ["@Zeptly/registry-maintainers"]
-provenance:
-  origin: human-authored
-  trust_tier: first-party
-compatibility:
-  protocol: 1
-  agent_classes: [execution, qb, timesaver]
-requires:
-  capabilities:
+apiVersion: registry.zeptly.dev/v1alpha1
+kind: SkillBlueprint
+metadata:
+  id: structured-data-extraction
+  version: 1.0.0
+  registry: skills
+  origin: {type: authored}
+  maturity: canonical
+  lifecycle: active
+spec:
+  title: Structured Data Extraction
+  description: Extract fields from unstructured or semi-structured documents into a schema-conforming record with
+    per-field evidence and confidence. Use when text, PDFs or HTML must become validated structured data.
+  domain: data
+  tags: [data, extraction, documents]
+  stewardship:
+    maintainers: ['@Zeptly/registry-maintainers']
+  trust: {tier: first-party}
+  compatibility:
+    protocol: 1
+    agent_classes: [execution, qb, timesaver]
+  requires:
+    capabilities:
     - {id: cap.doc.parse}
     - {id: cap.llm.structured}
     - {id: cap.fs.read}
-inputs:
+  inputs:
   - {name: document, type: file, description: Document to extract from.}
   - {name: schema, type: object, description: JSON Schema of the target record.}
-outputs:
-  - {name: result, type: object, description: "record, per-field evidence spans, and warnings."}
+  outputs:
+  - {name: result, type: object, description: 'record, per-field evidence spans, and warnings.'}
+  security_profile:
+    data_sensitivity: [confidential]
+    side_effects: none
+    permissions:
+    - {scope: 'fs:workspace', access: read, reason: Read the supplied document.}
+    network: {egress: none}
+    authentication: {required: false}
+    hitl: {required: false}
+  evaluation: {suite: evals/suite.yaml, min_pass_rate: 0.85}
+references: []
+provenance:
+  createdAt: '2026-09-29T00:00:00Z'
+  authors:
+  - {name: Zeptly, kind: organisation}
+  sourceRefs: []
+  transformations: []
 security:
   classification: moderate
-  data_sensitivity: [confidential]
-  side_effects: none
-  permissions:
-    - {scope: "fs:workspace", access: read, reason: Read the supplied document.}
-  network: {egress: none}
-  authentication: {required: false}
-  hitl: {required: false}
-evaluation:
-  suite: evals/suite.yaml
-  min_pass_rate: 0.85
+  capabilities: [cap.doc.parse, cap.llm.structured, cap.fs.read]
+  approvals:
+  - {type: governance, ref: 'bundle:provenance/approval.yaml', subjectDigest: 'sha256:0222bc6d765b4464dd44e5faf46b99d8e2f1c0331a999e386554972ee642e64e',
+    issuedAt: '2026-09-29'}
+attestations: []

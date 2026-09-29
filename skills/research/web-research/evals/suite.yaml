@@ -1,5 +1,5 @@
 schema: zeptly.eval-suite/v1
-skill: zsk.web-research
+skill: web-research
 description: Behavioural checks for cited web research. Graders are interpreted by the eval harness.
 environment: {mode: recorded, notes: "Search/fetch results are replayed from fixtures for determinism."}
 cases:

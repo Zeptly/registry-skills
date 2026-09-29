@@ -1,47 +1,63 @@
-schema: zeptly.skill/v1
-id: zsk.competitive-intelligence
-name: competitive-intelligence
-title: Competitive Intelligence
-description: Build a sourced competitive landscape for a company or product by composing web research, source evaluation and structured comparison. Use when asked who the competitors are and how they compare.
-domain: research
-version: 1.0.0
-status: active
-tags: [research, competitors, composite]
-authorship:
-  authors:
-    - {name: Zeptly, kind: organisation}
-  maintainers: ["@Zeptly/registry-maintainers"]
-provenance:
-  origin: human-authored
-  trust_tier: first-party
-compatibility:
-  protocol: 1
-  agent_classes: [execution, qb]
-  min_context_tokens: 32000
-requires:
-  capabilities:
+apiVersion: registry.zeptly.dev/v1alpha1
+kind: SkillBlueprint
+metadata:
+  id: competitive-intelligence
+  version: 1.0.0
+  registry: skills
+  origin: {type: authored}
+  maturity: canonical
+  lifecycle: active
+spec:
+  title: Competitive Intelligence
+  description: Build a sourced competitive landscape for a company or product by composing web research, source
+    evaluation and structured comparison. Use when asked who the competitors are and how they compare.
+  domain: research
+  tags: [research, competitors, composite]
+  stewardship:
+    maintainers: ['@Zeptly/registry-maintainers']
+  trust: {tier: first-party}
+  compatibility:
+    protocol: 1
+    agent_classes: [execution, qb]
+    min_context_tokens: 32000
+  requires:
+    capabilities:
     - {id: cap.web.search}
     - {id: cap.web.fetch}
-dependencies:
-  - {id: zsk.web-research, version: "^1.0.0", role: composes}
-  - {id: zsk.source-evaluation, version: "^1.0.0", role: composes}
-  - {id: zsk.structured-comparison, version: "^1.0.0", role: composes}
-inputs:
+  composition:
+  - {id: web-research, role: composes}
+  - {id: source-evaluation, role: composes}
+  - {id: structured-comparison, role: composes}
+  inputs:
   - {name: subject, type: string, description: Company or product to analyse.}
   - {name: segment, type: string, required: false, description: Market segment or use case to focus on.}
-outputs:
-  - {name: landscape, type: markdown, description: "Competitor list, comparison matrix, insights and graded sources."}
+  outputs:
+  - {name: landscape, type: markdown, description: 'Competitor list, comparison matrix, insights and graded sources.'}
+  security_profile:
+    data_sensitivity: [public]
+    side_effects: read-external
+    permissions:
+    - {scope: 'web:public', access: read, reason: Inherited from composed web-research.}
+    external_systems:
+    - {name: Public web, kind: web}
+    network: {egress: open}
+    authentication: {required: false}
+    hitl: {required: false}
+  evaluation: {suite: evals/suite.yaml, min_pass_rate: 0.8}
+references:
+- {registry: skills, id: web-research, version: ^1.0.0, digest: null}
+- {registry: skills, id: source-evaluation, version: ^1.0.0, digest: null}
+- {registry: skills, id: structured-comparison, version: ^1.0.0, digest: null}
+provenance:
+  createdAt: '2026-09-29T00:00:00Z'
+  authors:
+  - {name: Zeptly, kind: organisation}
+  sourceRefs: []
+  transformations: []
 security:
   classification: low
-  data_sensitivity: [public]
-  side_effects: read-external
-  permissions:
-    - {scope: "web:public", access: read, reason: Inherited from composed web-research.}
-  external_systems:
-    - {name: Public web, kind: web}
-  network: {egress: open}
-  authentication: {required: false}
-  hitl: {required: false}
-evaluation:
-  suite: evals/suite.yaml
-  min_pass_rate: 0.8
+  capabilities: [cap.web.search, cap.web.fetch]
+  approvals:
+  - {type: governance, ref: 'bundle:provenance/approval.yaml', subjectDigest: 'sha256:f597943142aee89683057c680b81dd4765e3fee59b1ddaf73c48d1cf4824e411',
+    issuedAt: '2026-09-29'}
+attestations: []

@@ -1,5 +1,5 @@
 schema: zeptly.eval-suite/v1
-skill: zsk.code-review
+skill: code-review
 environment: {mode: recorded, notes: "Diffs are supplied as fixtures; no live repository access."}
 cases:
   - id: off-by-one

@@ -1,38 +1,52 @@
-schema: zeptly.skill/v1
-id: zsk.structured-comparison
-name: structured-comparison
-title: Structured Comparison
-description: Compare two or more entities (products, vendors, options) across explicit criteria and produce a normalised comparison matrix with a justified recommendation. Use when a decision needs like-for-like comparison.
-domain: analysis
-version: 1.0.0
-status: active
-tags: [analysis, comparison, decision]
-authorship:
-  authors:
-    - {name: Zeptly, kind: organisation}
-  maintainers: ["@Zeptly/registry-maintainers"]
-provenance:
-  origin: human-authored
-  trust_tier: first-party
-compatibility:
-  protocol: 1
-  agent_classes: [any]
-requires:
-  capabilities:
+apiVersion: registry.zeptly.dev/v1alpha1
+kind: SkillBlueprint
+metadata:
+  id: structured-comparison
+  version: 1.0.0
+  registry: skills
+  origin: {type: authored}
+  maturity: canonical
+  lifecycle: active
+spec:
+  title: Structured Comparison
+  description: Compare two or more entities (products, vendors, options) across explicit criteria and produce a
+    normalised comparison matrix with a justified recommendation. Use when a decision needs like-for-like comparison.
+  domain: analysis
+  tags: [analysis, comparison, decision]
+  stewardship:
+    maintainers: ['@Zeptly/registry-maintainers']
+  trust: {tier: first-party}
+  compatibility:
+    protocol: 1
+    agent_classes: [any]
+  requires:
+    capabilities:
     - {id: cap.llm.structured, optional: true}
-inputs:
+  inputs:
   - {name: entities, type: array, description: Entities to compare with the facts known about each.}
   - {name: decision_context, type: string, description: What the comparison is for.}
   - {name: criteria, type: array, required: false, description: Optional user-specified criteria and weights.}
-outputs:
-  - {name: comparison, type: markdown, description: "Criteria, matrix with evidence, trade-offs and conditional recommendation."}
+  outputs:
+  - {name: comparison, type: markdown, description: 'Criteria, matrix with evidence, trade-offs and conditional
+      recommendation.'}
+  security_profile:
+    data_sensitivity: [public]
+    side_effects: none
+    permissions: []
+    authentication: {required: false}
+    hitl: {required: false}
+  evaluation: {suite: evals/suite.yaml, min_pass_rate: 0.8}
+references: []
+provenance:
+  createdAt: '2026-09-29T00:00:00Z'
+  authors:
+  - {name: Zeptly, kind: organisation}
+  sourceRefs: []
+  transformations: []
 security:
   classification: low
-  data_sensitivity: [public]
-  side_effects: none
-  permissions: []
-  authentication: {required: false}
-  hitl: {required: false}
-evaluation:
-  suite: evals/suite.yaml
-  min_pass_rate: 0.8
+  capabilities: [cap.llm.structured]
+  approvals:
+  - {type: governance, ref: 'bundle:provenance/approval.yaml', subjectDigest: 'sha256:120dbb9e552003bd06f6265dfac25b6c51af8a7faf63657db319a032caaa99e5',
+    issuedAt: '2026-09-29'}
+attestations: []

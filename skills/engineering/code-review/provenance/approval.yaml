@@ -1,9 +1,10 @@
-schema: zeptly.approval/v1
-skill_ref: zsk.code-review@1.0.0
-approved_by: ["@Zeptly/registry-maintainers"]
-approved_at: 2026-09-29
+apiVersion: registry.zeptly.dev/v1alpha1
+kind: Approval
+subject: {registry: skills, id: code-review, version: 1.0.0, digest: 'sha256:00988cac228a513586992eae9acc74a2b63083f5ba3c0cf72bb4aeaa19f2880b'}
+approvedBy: ['@Zeptly/registry-maintainers']
+approvedAt: '2026-09-29'
 basis: waiver
-waiver:
-  reason: Registry bootstrap seed skill; suite is structurally validated but has not yet been executed by an eval harness.
-  expires_on_version: 1.1.0
-notes: Seed content authored with the registry baseline. Maintainers must ratify this record or replace it with an eval-report approval.
+waiver: {reason: Registry bootstrap seed skill; suite is structurally validated but has not yet been executed by
+    an eval harness., expiresOnVersion: 1.1.0}
+notes: Seed content authored with the registry baseline. Maintainers must ratify this record or replace it with
+  an eval-report approval.

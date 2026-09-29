@@ -18,3 +18,16 @@ Baseline choices were made to keep the protocol usable; these need owner input.
 | 12 | **Deletion/erasure** | Retired IDs are kept forever | Procedure for legal takedowns that must alter history. |
 | 13 | **Zep write identity** | PR from a bot account | Required signing/branch protections and rate limits for automated proposals. |
 | 14 | **Consumers pinning strategy** | Recommend id+version+digest | Do agent registries pin exact versions or ranges with a lockfile? |
+
+## Added by Registry Protocol v0.1 alignment (all need cross-registry reconciliation)
+
+| # | Decision | Baseline chosen | Question |
+|---|---|---|---|
+| 15 | **Evaluation waiver** | Transitional, time-boxed waiver lets the six seed skills be canonical | Does the protocol permit waivers at all? If not, seeds return to `candidate`. |
+| 16 | **`metadata.id` grammar** | Envelope: `[a-z0-9]+([.-][a-z0-9]+)*`; skills: slug only | Shared grammar across registries; is a dot-namespaced form (`research.web-fact-check`) expected for skills? |
+| 17 | **Classification vocabulary** | `low/moderate/high/critical` for skills | Shared vocabulary (protocol example shows `restricted`)? |
+| 18 | **Vocabularies** | `origin.type`, `evolution.kind`, attestation types are registry-local | Shared enums? |
+| 19 | **Attestation and approval shapes** | Same `{type, ref, subjectDigest}` shape for both | Separate shapes? Who may issue which type? |
+| 20 | **Candidate storage** | Separate `candidates/` tier | Candidates as in-tree objects vs. a shared candidate store across registries? |
+| 21 | **Digest scope** | Governance state excluded from digest | Same rule in every registry, or must attestation-bearing fields be included? |
+| 22 | **Security review for lower classifications** | PR-level CODEOWNERS review | Explicit `securityReviewedBy` for every promotion? |

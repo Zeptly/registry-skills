@@ -1,5 +1,5 @@
 schema: zeptly.eval-suite/v1
-skill: zsk.structured-data-extraction
+skill: structured-data-extraction
 environment: {mode: recorded}
 cases:
   - id: clean-invoice

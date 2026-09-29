@@ -8,7 +8,7 @@ description: Answer a research question by searching the web, reading primary so
 ## When to use
 
 - The task needs facts that are external, current, or verifiable (market data, product details, documentation, events).
-- Do **not** use for questions answerable from the provided context, or when the user has supplied the sources (use `zsk.source-evaluation` instead).
+- Do **not** use for questions answerable from the provided context, or when the user has supplied the sources (use `skills:source-evaluation` instead).
 
 ## Procedure
 

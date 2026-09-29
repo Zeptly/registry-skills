@@ -29,8 +29,16 @@ def main(argv=None) -> int:
     p = sub.add_parser("promote", help="move an approved candidate into skills/, set active, and release it")
     p.add_argument("skill")
 
-    i = sub.add_parser("index", help="(re)generate registry/index.json")
-    i.add_argument("--check", action="store_true", help="fail if index.json is stale")
+    i = sub.add_parser("index", help="(re)generate the deterministic index (production and synthetic are separate files)")
+    i.add_argument("--check", action="store_true", help="fail if an index file is stale")
+
+    lc2 = sub.add_parser("lifecycle", help="append a lifecycle event (active|deprecated|revoked) for a version")
+    lc2.add_argument("skill")
+    lc2.add_argument("version")
+    lc2.add_argument("state", choices=["active", "deprecated", "revoked"])
+    lc2.add_argument("--reason", required=True)
+    lc2.add_argument("--replaced-by", help="<id>@<version>")
+    lc2.add_argument("--sunset", help="YYYY-MM-DD")
 
     rs = sub.add_parser("resolve", help="resolve a skill + dependency closure to exact versions and digests")
     rs.add_argument("skill")
@@ -41,6 +49,7 @@ def main(argv=None) -> int:
 
     n = sub.add_parser("new", help="scaffold a new candidate skill")
     n.add_argument("path", help="<domain>/<name>")
+    n.add_argument("--synthetic", action="store_true", help="create under synthetic/ (never enters production indexes)")
 
     a = ap.parse_args(argv)
     root = repo_root()
@@ -66,16 +75,28 @@ def main(argv=None) -> int:
     elif a.cmd == "promote":
         print(ops.promote(root, a.skill))
     elif a.cmd == "index":
-        text = ops.index_text(root)
-        target = root / "registry" / "index.json"
-        if a.check:
-            if not target.exists() or target.read_text(encoding="utf-8") != text:
-                print("registry/index.json is stale; run `zskill index`", file=sys.stderr)
-                return 1
-            print("index up to date")
-        else:
-            target.write_text(text, encoding="utf-8")
-            print(f"wrote {target.relative_to(root)}")
+        rc = 0
+        for ns in ("production", "synthetic"):
+            target = ops.index_path(root, ns)
+            text = ops.index_text(root, ns)
+            empty = not ops.index(root, ns)["entries"]
+            if a.check:
+                if empty and not target.exists():
+                    continue
+                if not target.exists() or target.read_text(encoding="utf-8") != text:
+                    print(f"{target.relative_to(root)} is stale; run `zskill index`", file=sys.stderr)
+                    rc = 1
+            elif empty and ns == "synthetic":
+                if target.exists():
+                    target.unlink()
+            else:
+                target.write_text(text, encoding="utf-8")
+                print(f"wrote {target.relative_to(root)}")
+        if a.check and rc == 0:
+            print("indexes up to date")
+        return rc
+    elif a.cmd == "lifecycle":
+        print(ops.set_lifecycle(root, a.skill, a.version, a.state, a.reason, a.replaced_by, a.sunset))
     elif a.cmd == "resolve":
         print(json.dumps(ops.resolve(root, a.skill, a.range), indent=2))
     elif a.cmd == "ledger-check":
@@ -86,7 +107,7 @@ def main(argv=None) -> int:
         return 1 if probs else 0
     elif a.cmd == "new":
         dom, _, name = a.path.partition("/")
-        print(f"created {ops.scaffold(root, dom, name).relative_to(root)}")
+        print(f"created {ops.scaffold(root, dom, name, 'synthetic' if a.synthetic else 'candidates').relative_to(root)}")
     return 0
 
 

@@ -1,9 +1,10 @@
-schema: zeptly.approval/v1
-skill_ref: zsk.structured-comparison@1.0.0
-approved_by: ["@Zeptly/registry-maintainers"]
-approved_at: 2026-09-29
+apiVersion: registry.zeptly.dev/v1alpha1
+kind: Approval
+subject: {registry: skills, id: structured-comparison, version: 1.0.0, digest: 'sha256:120dbb9e552003bd06f6265dfac25b6c51af8a7faf63657db319a032caaa99e5'}
+approvedBy: ['@Zeptly/registry-maintainers']
+approvedAt: '2026-09-29'
 basis: waiver
-waiver:
-  reason: Registry bootstrap seed skill; suite is structurally validated but has not yet been executed by an eval harness.
-  expires_on_version: 1.1.0
-notes: Seed content authored with the registry baseline. Maintainers must ratify this record or replace it with an eval-report approval.
+waiver: {reason: Registry bootstrap seed skill; suite is structurally validated but has not yet been executed by
+    an eval harness., expiresOnVersion: 1.1.0}
+notes: Seed content authored with the registry baseline. Maintainers must ratify this record or replace it with
+  an eval-report approval.

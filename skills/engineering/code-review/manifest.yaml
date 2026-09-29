@@ -1,50 +1,63 @@
-schema: zeptly.skill/v1
-id: zsk.code-review
-name: code-review
-title: Code Review
-description: Review a code change (diff or pull request) for correctness, security, maintainability and test adequacy, returning prioritised, evidence-backed findings. Use when asked to review a PR, patch or branch.
-domain: engineering
-version: 1.0.0
-status: active
-tags: [engineering, review, security]
-authorship:
-  authors:
-    - {name: Zeptly, kind: organisation}
-  maintainers: ["@Zeptly/registry-maintainers"]
-provenance:
-  origin: human-authored
-  trust_tier: first-party
-compatibility:
-  protocol: 1
-  agent_classes: [execution, qb]
-  min_context_tokens: 32000
-requires:
-  capabilities:
+apiVersion: registry.zeptly.dev/v1alpha1
+kind: SkillBlueprint
+metadata:
+  id: code-review
+  version: 1.0.0
+  registry: skills
+  origin: {type: authored}
+  maturity: canonical
+  lifecycle: active
+spec:
+  title: Code Review
+  description: Review a code change (diff or pull request) for correctness, security, maintainability and test adequacy,
+    returning prioritised, evidence-backed findings. Use when asked to review a PR, patch or branch.
+  domain: engineering
+  tags: [engineering, review, security]
+  stewardship:
+    maintainers: ['@Zeptly/registry-maintainers']
+  trust: {tier: first-party}
+  compatibility:
+    protocol: 1
+    agent_classes: [execution, qb]
+    min_context_tokens: 32000
+  requires:
+    capabilities:
     - {id: cap.code.read}
     - {id: cap.vcs.read}
-  tools:
+    tools:
     - {kind: mcp, name: github, server: github-mcp-server, optional: true}
-inputs:
-  - {name: change, type: string, description: "Diff text, PR URL, or branch/commit range to review."}
-  - {name: focus, type: string, required: false, description: "Optional emphasis, e.g. security or performance."}
-outputs:
-  - {name: review, type: markdown, description: Verdict and prioritised findings with file:line evidence.}
+  inputs:
+  - {name: change, type: string, description: 'Diff text, PR URL, or branch/commit range to review.'}
+  - {name: focus, type: string, required: false, description: 'Optional emphasis, e.g. security or performance.'}
+  outputs:
+  - {name: review, type: markdown, description: 'Verdict and prioritised findings with file:line evidence.'}
+  security_profile:
+    data_sensitivity: [confidential]
+    side_effects: read-external
+    permissions:
+    - {scope: 'vcs:repo', access: read, reason: 'Read the diff, files and PR metadata under review.'}
+    external_systems:
+    - {name: Source-control host, kind: saas}
+    network:
+      egress: allowlist
+      allowed_domains: [github.com, api.github.com]
+    authentication:
+      required: true
+      methods: [oauth, user-delegated]
+      credential_handling: runtime-injected
+    hitl: {required: false}
+  evaluation: {suite: evals/suite.yaml, min_pass_rate: 0.8}
+references: []
+provenance:
+  createdAt: '2026-09-29T00:00:00Z'
+  authors:
+  - {name: Zeptly, kind: organisation}
+  sourceRefs: []
+  transformations: []
 security:
   classification: moderate
-  data_sensitivity: [confidential]
-  side_effects: read-external
-  permissions:
-    - {scope: "vcs:repo", access: read, reason: "Read the diff, files and PR metadata under review."}
-  external_systems:
-    - {name: Source-control host, kind: saas}
-  network:
-    egress: allowlist
-    allowed_domains: [github.com, api.github.com]
-  authentication:
-    required: true
-    methods: [oauth, user-delegated]
-    credential_handling: runtime-injected
-  hitl: {required: false}
-evaluation:
-  suite: evals/suite.yaml
-  min_pass_rate: 0.8
+  capabilities: [cap.code.read, cap.vcs.read]
+  approvals:
+  - {type: governance, ref: 'bundle:provenance/approval.yaml', subjectDigest: 'sha256:00988cac228a513586992eae9acc74a2b63083f5ba3c0cf72bb4aeaa19f2880b',
+    issuedAt: '2026-09-29'}
+attestations: []

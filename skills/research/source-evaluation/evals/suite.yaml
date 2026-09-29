@@ -1,5 +1,5 @@
 schema: zeptly.eval-suite/v1
-skill: zsk.source-evaluation
+skill: source-evaluation
 environment: {mode: recorded}
 cases:
   - id: primary-vs-vendor-blog

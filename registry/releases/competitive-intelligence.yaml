@@ -1,0 +1,9 @@
+schema: zeptly.ledger/v1
+registry: skills
+skill: competitive-intelligence
+releases:
+- version: 1.0.0
+  digest: sha256:f597943142aee89683057c680b81dd4765e3fee59b1ddaf73c48d1cf4824e411
+  contract_digest: sha256:81847edfe2e3465b82d6c012835d6833b180ee991c91775c900c60c4bc7b5913
+  security_digest: sha256:8d1d8b7984df6b368af83fe28c39954eea1aafead8de81287e52ea49aa213b32
+  released_at: '2026-09-29'

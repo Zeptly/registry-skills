@@ -8,7 +8,7 @@ description: Assess the reliability of one or more information sources (provenan
 ## When to use
 
 - You hold one or more sources (pages, documents, datasets, quotes) and must decide how far to trust them.
-- Do not use to *find* sources; use `zsk.web-research` for that.
+- Do not use to *find* sources; use `skills:web-research` for that.
 
 ## Procedure
 

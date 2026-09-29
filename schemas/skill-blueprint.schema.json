@@ -1,0 +1,118 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://registry.zeptly.dev/schemas/skill-blueprint/v1alpha1.json",
+  "title": "SkillBlueprint: common envelope + Skills registry spec",
+  "allOf": [{"$ref": "https://registry.zeptly.dev/schemas/envelope/v1alpha1.json"}],
+  "type": "object",
+  "properties": {
+    "kind": {"const": "SkillBlueprint"},
+    "metadata": {
+      "type": "object",
+      "properties": {
+        "id": {"type": "string", "pattern": "^[a-z0-9]+(-[a-z0-9]+)*$", "maxLength": 64},
+        "registry": {"const": "skills"},
+        "origin": {"type": "object", "properties": {"type": {"enum": ["authored", "evolved", "discovered", "imported", "synthetic"]}}}
+      }
+    },
+    "spec": {"$ref": "#/$defs/spec"}
+  },
+  "$defs": {
+    "spec": {
+      "type": "object", "additionalProperties": false,
+      "required": ["title", "description", "domain", "compatibility", "requires", "inputs", "outputs",
+                   "security_profile", "evaluation", "trust"],
+      "properties": {
+        "title": {"type": "string", "minLength": 3, "maxLength": 100},
+        "description": {"type": "string", "minLength": 20, "maxLength": 1024, "pattern": "^[^<>]*$"},
+        "domain": {"type": "string", "pattern": "^[a-z][a-z0-9-]*$"},
+        "tags": {"type": "array", "uniqueItems": true, "items": {"type": "string", "pattern": "^[a-z0-9-]+$"}},
+        "stage": {"enum": ["discovered", "inspected", "drafted", "evaluating", "approved"],
+                  "description": "Candidate workflow stage. Present only while maturity is candidate."},
+        "stewardship": {"type": "object", "additionalProperties": false,
+          "properties": {"maintainers": {"type": "array", "minItems": 1, "items": {"type": "string", "pattern": "^@[A-Za-z0-9_/-]+$"}},
+                         "license": {"type": "string"}}},
+        "trust": {"type": "object", "additionalProperties": false, "required": ["tier"],
+          "properties": {"tier": {"enum": ["first-party", "reviewed-third-party", "unreviewed"]},
+                         "assessment": {"type": "string", "description": "Path inside the bundle to the provenance/security assessment."}}},
+        "compatibility": {
+          "type": "object", "additionalProperties": false, "required": ["agent_classes", "protocol"],
+          "properties": {
+            "protocol": {"type": "integer", "minimum": 1, "description": "Skill Blueprint spec major (this spec = 1)."},
+            "agent_classes": {"type": "array", "minItems": 1, "uniqueItems": true, "items": {"type": "string"}},
+            "min_context_tokens": {"type": "integer", "minimum": 1000},
+            "model_notes": {"type": "string"},
+            "supersedes": {"type": "array", "items": {"$ref": "#/$defs/skillId"}}
+          }
+        },
+        "requires": {
+          "type": "object", "additionalProperties": false, "required": ["capabilities"],
+          "properties": {
+            "capabilities": {"type": "array", "items": {
+              "type": "object", "additionalProperties": false, "required": ["id"],
+              "properties": {"id": {"type": "string", "pattern": "^cap\\.[a-z0-9]+(\\.[a-z0-9-]+)+$"},
+                             "optional": {"type": "boolean", "default": false}}}},
+            "tools": {"type": "array", "items": {
+              "type": "object", "additionalProperties": false, "required": ["kind", "name"],
+              "properties": {"kind": {"enum": ["builtin", "mcp", "api", "computer-use", "cli"]},
+                             "name": {"type": "string"}, "server": {"type": "string"},
+                             "version_constraint": {"type": "string"}, "optional": {"type": "boolean", "default": false}}}}
+          }
+        },
+        "composition": {
+          "type": "array", "maxItems": 8,
+          "description": "Semantics for skills-registry entries in envelope `references` (version ranges live there).",
+          "items": {"type": "object", "additionalProperties": false, "required": ["id"],
+            "properties": {"id": {"$ref": "#/$defs/skillId"},
+                           "role": {"enum": ["composes", "prerequisite"], "default": "composes"},
+                           "optional": {"type": "boolean", "default": false}}}
+        },
+        "inputs": {"type": "array", "items": {"$ref": "#/$defs/param"}},
+        "outputs": {"type": "array", "minItems": 1, "items": {"$ref": "#/$defs/param"}},
+        "security_profile": {
+          "type": "object", "additionalProperties": false,
+          "required": ["data_sensitivity", "side_effects", "permissions", "authentication", "hitl"],
+          "properties": {
+            "data_sensitivity": {"type": "array", "minItems": 1, "uniqueItems": true,
+              "items": {"enum": ["public", "internal", "confidential", "personal", "regulated"]}},
+            "side_effects": {"enum": ["none", "read-external", "write-external", "destructive"]},
+            "permissions": {"type": "array", "items": {
+              "type": "object", "additionalProperties": false, "required": ["scope", "access", "reason"],
+              "properties": {"scope": {"type": "string"}, "access": {"enum": ["read", "write", "delete", "execute"]},
+                             "reason": {"type": "string", "minLength": 5}}}},
+            "external_systems": {"type": "array", "items": {
+              "type": "object", "additionalProperties": false, "required": ["name", "kind"],
+              "properties": {"name": {"type": "string"}, "kind": {"enum": ["web", "api", "mcp", "saas", "database", "filesystem", "other"]}}}},
+            "network": {"type": "object", "additionalProperties": false, "required": ["egress"],
+              "properties": {"egress": {"enum": ["none", "allowlist", "open"]},
+                             "allowed_domains": {"type": "array", "items": {"type": "string"}}}},
+            "authentication": {"type": "object", "additionalProperties": false, "required": ["required"],
+              "properties": {"required": {"type": "boolean"},
+                             "methods": {"type": "array", "items": {"enum": ["oauth", "api-key", "service-account", "session-cookie", "user-delegated"]}},
+                             "credential_handling": {"const": "runtime-injected"}}},
+            "destructive_operations": {"type": "array", "items": {
+              "type": "object", "additionalProperties": false, "required": ["operation", "reversible"],
+              "properties": {"operation": {"type": "string"}, "reversible": {"type": "boolean"}}}},
+            "hitl": {"type": "object", "additionalProperties": false, "required": ["required"],
+              "properties": {"required": {"type": "boolean"}, "triggers": {"type": "array", "items": {"type": "string"}}}}
+          }
+        },
+        "evaluation": {
+          "type": "object", "additionalProperties": false, "required": ["suite", "min_pass_rate"],
+          "properties": {"suite": {"type": "string"}, "min_pass_rate": {"type": "number", "minimum": 0, "maximum": 1}}
+        },
+        "x": {"type": "object"}
+      }
+    },
+    "skillId": {"type": "string", "pattern": "^[a-z0-9]+(-[a-z0-9]+)*$"},
+    "param": {
+      "type": "object", "additionalProperties": false, "required": ["name", "type", "description"],
+      "properties": {
+        "name": {"type": "string", "pattern": "^[a-z][a-z0-9_]*$"},
+        "type": {"enum": ["string", "integer", "number", "boolean", "url", "file", "object", "array", "markdown"]},
+        "required": {"type": "boolean", "default": true},
+        "description": {"type": "string", "minLength": 3},
+        "schema": {"type": "object"}
+      }
+    }
+  }
+}

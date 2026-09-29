@@ -10,12 +10,18 @@ from pathlib import Path
 
 import yaml
 
-TIERS = ("skills", "candidates")
+TIERS = ("skills", "candidates", "synthetic")
+PRODUCTION_TIERS = ("skills", "candidates")
 # Files excluded from the version digest: evidence and approvals accumulate
 # *about* a version without changing it; the changelog is human commentary.
 DIGEST_EXCLUDED_TOP = {"provenance", "CHANGELOG.md"}
-# Manifest keys excluded: lifecycle status must not alter a version's identity.
-DIGEST_EXCLUDED_MANIFEST_KEYS = ("status", "deprecation")
+# Manifest paths excluded from the digest. These are governance state that changes
+# *about* a fixed version (promotion, lifecycle, attestations that bind to the digest);
+# including them would make the digest circular or make promotion change identity.
+DIGEST_EXCLUDED_MANIFEST_PATHS = (
+    ("metadata", "maturity"), ("metadata", "lifecycle"), ("spec", "stage"),
+    ("attestations",), ("security", "approvals"),
+)
 
 _FM = re.compile(r"\A---\r?\n(.*?)\r?\n---\r?\n?(.*)\Z", re.S)
 
@@ -23,9 +29,9 @@ _FM = re.compile(r"\A---\r?\n(.*?)\r?\n---\r?\n?(.*)\Z", re.S)
 def repo_root(start: Path | None = None) -> Path:
     p = (start or Path.cwd()).resolve()
     for cand in [p, *p.parents]:
-        if (cand / "schemas" / "manifest.schema.json").exists():
+        if (cand / "schemas" / "envelope.schema.json").exists():
             return cand
-    raise SystemExit("not inside a registry-skills checkout (schemas/manifest.schema.json not found)")
+    raise SystemExit("not inside a registry-skills checkout (schemas/envelope.schema.json not found)")
 
 
 class _StrictLoader(yaml.SafeLoader):
@@ -64,16 +70,28 @@ class Bundle:
         return self.path.relative_to(self.root).as_posix()
 
     @property
+    def meta(self) -> dict:
+        return self.manifest.get("metadata") or {}
+
+    @property
+    def spec(self) -> dict:
+        return self.manifest.get("spec") or {}
+
+    @property
     def id(self) -> str | None:
-        return self.manifest.get("id")
+        return self.meta.get("id")
 
     @property
     def version(self) -> str | None:
-        return self.manifest.get("version")
+        return self.meta.get("version")
 
     @property
-    def status(self) -> str | None:
-        return self.manifest.get("status")
+    def maturity(self) -> str | None:
+        return self.meta.get("maturity")
+
+    @property
+    def lifecycle(self) -> str | None:
+        return self.meta.get("lifecycle")
 
     def skill_md(self) -> tuple[dict | None, str]:
         p = self.path / "SKILL.md"
@@ -104,10 +122,7 @@ class Bundle:
             if rel.split("/")[0] in DIGEST_EXCLUDED_TOP:
                 continue
             if rel == "manifest.yaml":
-                m = copy.deepcopy(self.manifest)
-                for k in DIGEST_EXCLUDED_MANIFEST_KEYS:
-                    m.pop(k, None)
-                h = sha256_hex(canonical_json(m))
+                h = sha256_hex(canonical_json(digest_view(self.manifest)))
             else:
                 data = p.read_bytes()
                 if p.suffix in (".md", ".yaml", ".yml", ".json", ".txt"):
@@ -117,17 +132,34 @@ class Bundle:
         return "sha256:" + sha256_hex("".join(lines).encode())
 
     def contract_digest(self) -> str:
-        m = self.manifest
+        sp = self.spec
         subset = {
-            "inputs": m.get("inputs"), "outputs": m.get("outputs"),
-            "requires": m.get("requires"), "dependencies": m.get("dependencies"),
-            "agent_classes": (m.get("compatibility") or {}).get("agent_classes"),
-            "protocol": (m.get("compatibility") or {}).get("protocol"),
+            "inputs": sp.get("inputs"), "outputs": sp.get("outputs"), "requires": sp.get("requires"),
+            "composition": sp.get("composition"), "references": self.manifest.get("references"),
+            "agent_classes": (sp.get("compatibility") or {}).get("agent_classes"),
+            "protocol": (sp.get("compatibility") or {}).get("protocol"),
         }
         return "sha256:" + sha256_hex(canonical_json(subset))
 
     def security_digest(self) -> str:
-        return "sha256:" + sha256_hex(canonical_json(self.manifest.get("security")))
+        sec = self.manifest.get("security") or {}
+        subset = {"profile": self.spec.get("security_profile"),
+                  "classification": sec.get("classification"), "capabilities": sec.get("capabilities")}
+        return "sha256:" + sha256_hex(canonical_json(subset))
+
+
+def digest_view(manifest: dict) -> dict:
+    """Manifest with governance-state paths removed (see DIGEST_EXCLUDED_MANIFEST_PATHS)."""
+    m = copy.deepcopy(manifest)
+    for path in DIGEST_EXCLUDED_MANIFEST_PATHS:
+        node = m
+        for k in path[:-1]:
+            node = node.get(k) if isinstance(node, dict) else None
+            if node is None:
+                break
+        if isinstance(node, dict):
+            node.pop(path[-1], None)
+    return m
 
 
 def load_bundles(root: Path) -> list[Bundle]:
@@ -152,3 +184,17 @@ def load_bundles(root: Path) -> list[Bundle]:
 def load_ledger(root: Path, skill_id: str) -> dict | None:
     p = root / "registry" / "releases" / f"{skill_id}.yaml"
     return load_yaml(p) if p.exists() else None
+
+
+def load_lifecycle(root: Path, skill_id: str) -> dict | None:
+    p = root / "registry" / "lifecycle" / f"{skill_id}.yaml"
+    return load_yaml(p) if p.exists() else None
+
+
+def effective_lifecycle(overlay: dict | None, version: str) -> str:
+    """Latest event for the version wins; no events means active."""
+    state = "active"
+    for ev in (overlay or {}).get("events", []):
+        if ev["version"] == version:
+            state = ev["state"]
+    return state

@@ -1,48 +1,38 @@
-# Lifecycle and Promotion
+# Maturity, Lifecycle and Promotion
 
-## Status model
+Protocol v0.1 requires `maturity`, `origin` and `lifecycle` to be independent. This registry separates them physically as well as logically.
 
-```
-discovered → inspected → candidate → evaluating → approved ──promote──▶ active ─▶ deprecated ─▶ retired
-     └──────────────┴──────────┴───────────┴────────┴──▶ rejected (terminal, kept for the record)
-```
+| Field | Values | Meaning | Where it lives | In digest? |
+|---|---|---|---|---|
+| `metadata.maturity` | `candidate`, `canonical` | Has the version passed the promotion gate? | manifest (mirrors location `candidates/` vs `skills/`) | no |
+| `spec.stage` (candidates only) | `discovered`, `inspected`, `drafted`, `evaluating`, `approved` | Workflow progress inside candidate | manifest | no |
+| `metadata.lifecycle` | `active`, `deprecated`, `revoked` | Append-only overlay state | `registry/lifecycle/<id>.yaml`, mirrored in manifest | no |
+| `metadata.origin` | `authored`, `evolved`, `discovered`, `imported`, `synthetic` | How it came to exist | manifest | **yes** |
 
-| Status | Meaning | Lives in | Gate to enter |
-|---|---|---|---|
-| `discovered` | Idea/capability noticed (external or internal). Nothing trusted. | `candidates/` | A skeleton PR with sources listed. |
-| `inspected` | Provenance and security assessment recorded. | `candidates/` | `provenance/assessment.yaml` (external origins). |
-| `candidate` | Procedure drafted; assessment verdict allows proceeding. | `candidates/` | Verdict `proceed-*`; valid SKILL.md + manifest + suite. |
-| `evaluating` | Eval harness is running/being reviewed. | `candidates/` | Suite passes structural validation. |
-| `approved` | A human authorised release of *this exact digest*. | `candidates/` | `approval.yaml` citing an eval report >= `min_pass_rate` (or a time-boxed waiver). |
-| `active` | Canonical; consumers may run it. | `skills/` | `zskill promote` (moves, releases, ledger). |
-| `deprecated` | Still resolvable; replacement/sunset given. | `skills/` | `deprecation` block. |
-| `retired` | No longer resolvable for new work; history kept, ID never reused. | `skills/` | `deprecation` block. |
+A rejected candidate is recorded as lifecycle `revoked` (with a reason) rather than as a maturity or stage. The former `retired` status is expressed as `deprecated` with a `sunset` date, then `revoked` if it must no longer resolve.
 
-`unreviewed` trust tier can never reach `approved`. High/critical skills need `security_reviewed_by`.
+## Promotion gate (candidate -> canonical)
+
+Required by the protocol: schema validation, semantic checks, required evaluations, provenance, security review, digest-bound attestations, governed approval.
+
+Implemented: `zskill validate` (schema + semantic); an `evaluation` attestation whose report binds to the exact digest and suite and meets `min_pass_rate`; provenance (external sources pinned, assessment verdict permits progress, trust tier not `unreviewed`); `security.approvals[type=governance]` referencing `provenance/approval.yaml`, bound to the current digest, with `securityReviewedBy` for high/critical classification (for lower tiers, CODEOWNERS review of the security block in the PR is the governed security review); `zskill promote`.
+
+**Transitional exception:** approval `basis: waiver` (time-boxed by `expiresOnVersion`) may stand in for the evaluation attestation. It is *not* an evaluation, emits a CI warning, and marks the index `evidenceLevel: unevaluated`. The six seed skills rely on it. The protocol does not define waivers; see PROTOCOL-ALIGNMENT.md.
+
+`zskill promote <id>` moves the bundle from `candidates/` to `skills/`, sets `maturity: canonical`, removes `spec.stage`, and appends the ledger entry. The digest is unchanged, so existing attestations remain valid.
 
 ## Pipelines
 
-**Internal discovery (wisdom of compute)**: execution evidence in an evidence store → recurring pattern detected by Zep → Zep opens a PR adding `candidates/<domain>/<name>/` with `origin: zep-generalised` and `provenance/evidence.yaml` compute refs → CI → evaluation → human approval → `zskill promote`. For an *existing* skill, Zep opens a PR against `skills/...` with a version bump and evidence refs; the same gates apply.
+Git branches and pull requests are governance transport only; the candidate is the registry object under `candidates/`.
 
-**External discovery**: MCP server / API / platform / model found → `discovered` skeleton with pinned `sources` → inspection recorded in `assessment.yaml` (reputation, licence, capabilities, auth, data exposure, side effects, prompt-injection surface, supply chain) → verdict → candidate → evaluate in sandbox → approve → promote. *Discovery never grants runtime access*: runtimes only load `active` skills, and the manifest declares the tools/permissions the runtime must separately grant.
+* **Internal discovery**: evidence pointers -> Zep proposes `origin: {type: evolved, evolution: {kind: generalised, sourceRefs: [...]}}` (must cite >= 1 compute evidence pointer) or a new version of an existing identity (candidate version must exceed every canonical version).
+* **External discovery**: `origin.type: discovered`, pinned `provenance.sourceRefs`, `provenance/assessment.yaml`; nothing beyond `inspected` until the verdict permits. Discovery never grants runtime access.
+* **Crowd wisdom**: human corrections enter as `wisdom: crowd` evidence pointers plus a reviewed PR.
 
-**Crowd wisdom**: humans open PRs (or issues using the skill-proposal template) with corrections/best practice; evidence entries with `wisdom: crowd` link the source.
+## Lifecycle changes
+
+`zskill lifecycle <id> <version> deprecated --reason "..." [--replaced-by id@ver] [--sunset YYYY-MM-DD]` appends an event and updates the mirror. `revoked` is terminal; resolvers skip revoked versions; dependents of a revoked skill fail validation, and of a deprecated skill warn.
 
 ## Evolving a canonical skill
 
-1. Branch; edit the bundle; bump `version` per SPECIFICATION §4.
-2. Update evals; obtain an eval report for the new digest; update `provenance/approval.yaml`.
-3. `zskill release <id>` appends the ledger entry; `zskill index` refreshes the index.
-4. PR → CI (validate, tests, ledger append-only, index current) → CODEOWNER review → merge → tag `skill/<id>/v<version>` (automated).
-
-Old versions remain in the ledger and git history at the tag. Evidence keeps pointing at the exact version it observed.
-
-## Promotion of a candidate
-
-1. `status: approved`, approval + report present, all validation green.
-2. `zskill promote <id>`: moves the bundle to `skills/<domain>/<name>/`, sets `status: active`, writes the release entry (digest verified unchanged).
-3. `zskill index`; open PR; owners review; merge.
-
-## Deprecation and retirement
-
-Set `status: deprecated`, add `deprecation.reason` (+ `replaced_by`, `sunset`). Dependents get a validation warning. Retire only after dependents migrate; retired IDs stay in the ledger and are never reassigned.
+Bump `version`, update evals, obtain fresh attestations for the new digest, `zskill release <id>`, `zskill index`, open a PR. Old versions stay in the ledger and at their tag.

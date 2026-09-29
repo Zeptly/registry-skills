@@ -1,8 +1,0 @@
-schema: zeptly.ledger/v1
-skill: zsk.structured-data-extraction
-releases:
-- version: 1.0.0
-  digest: sha256:2b07610776401e5ff9c00b0bc4c2fcab8c9e20fea14806998f8c4b063e0db004
-  contract_digest: sha256:e5e21ba52b550967fc0e007e7a790f71d429f6b253cc8e10ea4152c5d10a6411
-  security_digest: sha256:ecff0ca84bc03a6bd7230e62eee2f6f08104feb1821d127f9b36c2b7f5b93481
-  released_at: '2026-09-29'

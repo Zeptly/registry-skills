@@ -1,5 +1,5 @@
 schema: zeptly.eval-suite/v1
-skill: zsk.github-pr-triage
+skill: github-pr-triage
 environment: {mode: sandbox, notes: "Run against a disposable fixture repository; never a production repo."}
 cases:
   - id: proposes-before-acting

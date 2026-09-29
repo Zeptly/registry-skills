@@ -1,4 +1,4 @@
-"""Mutating/derived operations: release, promote, index, resolve, ledger-check, scaffold."""
+"""Mutating/derived operations: release, promote, lifecycle, index, resolve, ledger-check, scaffold."""
 from __future__ import annotations
 
 import datetime as dt
@@ -10,20 +10,33 @@ from pathlib import Path
 
 import yaml
 
-from .bundle import Bundle, load_bundles, load_yaml
+from .bundle import PRODUCTION_TIERS, Bundle, effective_lifecycle, load_yaml
 from .semver import Version, satisfies
 from .validate import Registry
 
+API_VERSION = "registry.zeptly.dev/v1alpha1"
 
-def find(reg: Registry, ref: str) -> Bundle:
-    for b in reg.bundles:
-        if b.id == ref or b.rel == ref.rstrip("/") or b.manifest.get("name") == ref:
-            return b
-    raise SystemExit(f"no skill matching {ref!r}")
+
+def find(reg: Registry, ref: str, tier: str | None = None) -> Bundle:
+    matches = [b for b in reg.bundles if not b.manifest_error and (b.id == ref or b.rel == ref.rstrip("/"))
+               and (tier is None or b.tier == tier)]
+    if not matches:
+        raise SystemExit(f"no skill matching {ref!r}")
+    # prefer canonical when an id exists in several tiers
+    matches.sort(key=lambda b: {"skills": 0, "candidates": 1, "synthetic": 2}[b.tier])
+    return matches[0]
+
+
+def dump(obj) -> str:
+    return yaml.safe_dump(obj, sort_keys=False, default_flow_style=False, width=100)
 
 
 def ledger_path(root: Path, sid: str) -> Path:
     return root / "registry" / "releases" / f"{sid}.yaml"
+
+
+def overlay_path(root: Path, sid: str) -> Path:
+    return root / "registry" / "lifecycle" / f"{sid}.yaml"
 
 
 def release(root: Path, ref: str, notes: str | None = None, promoted_from: str | None = None) -> str:
@@ -38,7 +51,7 @@ def release(root: Path, ref: str, notes: str | None = None, promoted_from: str |
     if notes:
         entry["notes"] = notes
     p = ledger_path(root, b.id)
-    led = load_yaml(p) if p.exists() else {"schema": "zeptly.ledger/v1", "skill": b.id, "releases": []}
+    led = load_yaml(p) if p.exists() else {"schema": "zeptly.ledger/v1", "registry": "skills", "skill": b.id, "releases": []}
     for r in led["releases"]:
         if r["version"] == b.version:
             if r["digest"] == entry["digest"]:
@@ -46,128 +59,169 @@ def release(root: Path, ref: str, notes: str | None = None, promoted_from: str |
             raise SystemExit(f"{b.id}@{b.version} is already released with a different digest. Released versions are immutable; bump the version.")
     led["releases"].append(entry)
     p.parent.mkdir(parents=True, exist_ok=True)
-    p.write_text(yaml.safe_dump(led, sort_keys=False), encoding="utf-8")
+    p.write_text(dump(led), encoding="utf-8")
     return f"released {b.id}@{b.version} {entry['digest']}"
 
 
-def _set_status(manifest_path: Path, status: str):
+def _rewrite_line(manifest_path: Path, pattern: str, replacement: str | None):
     text = manifest_path.read_text(encoding="utf-8")
-    new, n = re.subn(r"(?m)^status:.*$", f"status: {status}", text, count=1)
+    new, n = re.subn(pattern, replacement if replacement is not None else "", text, count=1, flags=re.M)
     if n != 1:
-        raise SystemExit("could not rewrite status in manifest.yaml")
+        raise SystemExit(f"could not rewrite {pattern!r} in {manifest_path.name}")
     manifest_path.write_text(new, encoding="utf-8")
 
 
 def promote(root: Path, ref: str) -> str:
-    """candidate(status=approved) -> canonical (status=active) + release. Content digest is unchanged by design."""
+    """candidate(stage=approved) -> canonical + release. The content digest is unchanged by design
+    (maturity, stage, lifecycle and attestations are outside the digest), so existing attestations stay valid."""
     reg = Registry(root)
-    b = find(reg, ref)
-    if b.tier != "candidates":
-        raise SystemExit(f"{b.id} is not a candidate")
-    if b.status != "approved":
-        raise SystemExit(f"{b.id} has status {b.status!r}; only 'approved' candidates can be promoted")
+    b = find(reg, ref, tier="candidates")
+    if b.spec.get("stage") != "approved":
+        raise SystemExit(f"{b.id} has stage {b.spec.get('stage')!r}; only 'approved' candidates can be promoted")
+    if any(i.level == "error" and i.where.startswith(b.rel) for i in reg.run()):
+        raise SystemExit("candidate has validation errors; run `zskill validate` and fix them first")
     before = b.digest()
-    dest = root / "skills" / b.manifest["domain"] / b.manifest["name"]
+    dest = root / "skills" / b.spec["domain"] / b.id
     if dest.exists():
         raise SystemExit(f"{dest} already exists")
     dest.parent.mkdir(parents=True, exist_ok=True)
     shutil.move(str(b.path), str(dest))
-    _set_status(dest / "manifest.yaml", "active")
-    src = f"candidates/{b.manifest['domain']}/{b.manifest['name']}"
-    reg2 = Registry(root)
-    nb = find(reg2, b.id)
+    mp = dest / "manifest.yaml"
+    _rewrite_line(mp, r"^  maturity:.*$", "  maturity: canonical")
+    _rewrite_line(mp, r"^  stage:.*\n", None)
+    nb = find(Registry(root), b.id, tier="skills")
     assert nb.digest() == before, "digest changed during promotion"
-    msg = release(root, b.id, promoted_from=src)
-    return f"promoted {src} -> {nb.rel}; {msg}"
+    return f"promoted candidates/{b.spec['domain']}/{b.id} -> {nb.rel}; " + release(root, b.id, promoted_from=f"candidates/{b.spec['domain']}/{b.id}")
 
 
-def index(root: Path) -> dict:
+def set_lifecycle(root: Path, sid: str, version: str, state: str, reason: str,
+                  replaced_by: str | None = None, sunset: str | None = None) -> str:
+    """Append a lifecycle event and mirror the effective state into the manifest (outside the digest)."""
     reg = Registry(root)
-    entries = []
-    for b in sorted((x for x in reg.bundles if not x.manifest_error and x.id), key=lambda x: x.id):
-        m = b.manifest
-        rel_versions = (load_yaml(ledger_path(root, b.id)) or {}).get("releases", []) if ledger_path(root, b.id).exists() else []
-        ev = "n/a"
-        ap = b.path / "provenance" / "approval.yaml"
-        if ap.exists():
-            ev = "evaluated" if (load_yaml(ap) or {}).get("basis") == "eval-report" else "unevaluated"
-        entries.append({
-            "id": b.id, "name": m["name"], "domain": m["domain"], "path": b.rel,
-            "status": m["status"], "version": m["version"], "digest": b.digest(),
-            "evidence_level": ev,
-            "agent_classes": m["compatibility"]["agent_classes"],
-            "dependencies": [{"id": d["id"], "version": d["version"]} for d in m.get("dependencies", [])],
-            "security": {"classification": m["security"]["classification"], "side_effects": m["security"]["side_effects"],
-                         "hitl_required": m["security"]["hitl"]["required"]},
-            "released_versions": [{"version": r["version"], "digest": r["digest"]} for r in rel_versions],
-        })
-    return {"schema": "zeptly.index/v1", "generated_by": "zskill index", "skills": entries}
+    b = next((x for x in reg.bundles if x.id == sid and x.version == version), None)
+    released = version in reg.released_versions(sid)
+    if b is None and not released:
+        raise SystemExit(f"unknown artifact {sid}@{version}")
+    p = overlay_path(root, sid)
+    ov = load_yaml(p) if p.exists() else {"apiVersion": API_VERSION, "kind": "LifecycleOverlay", "registry": "skills", "id": sid, "events": []}
+    if effective_lifecycle(ov, version) == "revoked":
+        raise SystemExit(f"{sid}@{version} is revoked; revocation is terminal")
+    ev = {"version": version, "state": state, "at": dt.date.today().isoformat(), "reason": reason}
+    if replaced_by:
+        rid, _, rver = replaced_by.partition("@")
+        ev["replacedBy"] = {"registry": "skills", "id": rid, "version": rver}
+    if sunset:
+        ev["sunset"] = sunset
+    ov["events"].append(ev)
+    p.parent.mkdir(parents=True, exist_ok=True)
+    p.write_text(dump(ov), encoding="utf-8")
+    if b is not None:
+        _rewrite_line(b.path / "manifest.yaml", r"^  lifecycle:.*$", f"  lifecycle: {state}")
+    return f"{sid}@{version} lifecycle -> {state}"
 
 
-def index_text(root: Path) -> str:
-    return json.dumps(index(root), indent=2, sort_keys=False) + "\n"
+def _entry(reg: Registry, b: Bundle) -> dict:
+    ledger = reg.ledgers.get(b.id) or {}
+    released = [{"version": r["version"], "digest": r["digest"],
+                 "lifecycle": effective_lifecycle(reg.overlays.get(b.id), r["version"]),
+                 "tag": f"skill/{b.id}/v{r['version']}"} for r in ledger.get("releases", [])]
+    ev = "n/a"
+    for att in b.manifest["security"]["approvals"]:
+        if att["type"] == "governance" and att["ref"].startswith("bundle:"):
+            rec = load_yaml(b.path / att["ref"][7:])
+            ev = "evaluated" if rec.get("basis") == "evaluation" else "unevaluated"
+    return {
+        "kind": b.manifest["kind"], "id": b.id, "version": b.version, "digest": b.digest(),
+        "maturity": b.meta["maturity"], "lifecycle": effective_lifecycle(reg.overlays.get(b.id), b.version),
+        "origin": b.meta["origin"], "location": {"path": b.rel},
+        "extensions": {"skills": {
+            "domain": b.spec["domain"], "stage": b.spec.get("stage"), "evidenceLevel": ev,
+            "agentClasses": b.spec["compatibility"]["agent_classes"],
+            "references": [{"registry": r["registry"], "id": r["id"], "version": r["version"]} for r in b.manifest["references"]],
+            "classification": b.manifest["security"]["classification"],
+            "sideEffects": b.spec["security_profile"]["side_effects"],
+            "hitlRequired": b.spec["security_profile"]["hitl"]["required"],
+            "releasedVersions": released}},
+    }
+
+
+def index(root: Path, namespace: str = "production") -> dict:
+    """Deterministic derived index. Synthetic artifacts appear ONLY in the synthetic index."""
+    reg = Registry(root)
+    tiers = PRODUCTION_TIERS if namespace == "production" else ("synthetic",)
+    bundles = [b for b in reg.bundles if b.tier in tiers and not b.manifest_error and b.rel in _valid(reg)]
+    entries = sorted((_entry(reg, b) for b in bundles), key=lambda e: (e["id"], Version(e["version"]), e["maturity"]))
+    return {"apiVersion": API_VERSION, "kind": "RegistryIndex", "registry": "skills", "namespace": namespace, "entries": entries}
+
+
+def _valid(reg: Registry) -> set[str]:
+    if not reg.valid:
+        reg.run()
+    return reg.valid
+
+
+def index_text(root: Path, namespace: str = "production") -> str:
+    return json.dumps(index(root, namespace), indent=2) + "\n"
+
+
+def index_path(root: Path, namespace: str = "production") -> Path:
+    return root / "registry" / ("index.json" if namespace == "production" else "index.synthetic.json")
 
 
 def resolve(root: Path, sid: str, rng: str | None = None) -> dict:
-    """Resolve a skill and its transitive closure to exact versions + digests.
-
-    Agents log this resolution alongside execution evidence so a run can be
-    reproduced against the exact content it used.
-    """
+    """Range -> exact version -> content digest -> lock. Agents record this lock in evidence."""
     reg = Registry(root)
-    reg.by_id = {b.id: b for b in reg.bundles if b.id}
-    reg.check_ledgers()
+    reg.run()
     out: dict[str, dict] = {}
 
     def pick(t: Bundle, r: str | None):
-        cands = {r_["version"] for r_ in (reg.ledgers.get(t.id) or {}).get("releases", [])}
+        cands = set(reg.released_versions(t.id))
         if t.tier == "skills":
             cands.add(t.version)
+        cands = {v for v in cands if reg.lifecycle_of(t.id, v) != "revoked"}
         ok = [v for v in cands if r is None or satisfies(v, r)]
         if not ok:
-            raise SystemExit(f"cannot resolve {t.id} {r}: available {sorted(cands)}")
+            raise SystemExit(f"cannot resolve {t.id} {r}: available (non-revoked) {sorted(cands)}")
         return max(ok, key=Version)
 
     def walk(i, r):
         t = reg.by_id.get(i)
-        if t is None:
-            raise SystemExit(f"unknown skill {i}")
+        if t is None or t.rel not in reg.valid:
+            raise SystemExit(f"unknown or invalid skill {i}")
         if i in out:
             return
         v = pick(t, r)
         rel = next((x for x in (reg.ledgers.get(i) or {}).get("releases", []) if x["version"] == v), None)
-        if rel is None and t.version == v:
-            digest = t.digest()
-        elif rel:
-            digest = rel["digest"]
-        else:
+        digest = rel["digest"] if rel else (t.digest() if t.version == v else None)
+        if digest is None:
             raise SystemExit(f"no digest for {i}@{v}")
-        out[i] = {"ref": f"{i}@{v}", "digest": digest, "status": t.status}
-        for d in t.manifest.get("dependencies", []):
-            walk(d["id"], d["version"])
+        out[i] = {"registry": "skills", "id": i, "version": v, "digest": digest, "maturity": t.meta["maturity"],
+                  "lifecycle": reg.lifecycle_of(i, v)}
+        for ref in t.manifest["references"]:
+            if ref["registry"] == "skills":
+                walk(ref["id"], ref["version"])
     walk(sid, rng)
-    return {"schema": "zeptly.resolution/v1", "root": out[sid]["ref"], "skills": list(out.values())}
+    return {"apiVersion": API_VERSION, "kind": "ResolutionLock", "root": {k: out[sid][k] for k in ("registry", "id", "version", "digest")},
+            "resolved": list(out.values())}
 
 
 def ledger_check(root: Path, base: str) -> list[str]:
-    """Verify release ledgers are append-only relative to a base git ref."""
+    """Verify release ledgers and lifecycle overlays are append-only relative to a base git ref."""
     problems = []
-    d = root / "registry" / "releases"
-    res = subprocess.run(["git", "-C", str(root), "ls-tree", "-r", "--name-only", base, "registry/releases/"],
-                         capture_output=True, text=True)
-    if res.returncode != 0:
-        raise SystemExit(f"git ls-tree failed for {base}: {res.stderr.strip()}")
-    for name in filter(None, res.stdout.splitlines()):
-        show = subprocess.run(["git", "-C", str(root), "show", f"{base}:{name}"], capture_output=True, text=True)
-        old = yaml.safe_load(show.stdout) or {}
-        cur_p = root / name
-        if not cur_p.exists():
-            problems.append(f"{name}: ledger deleted (ledgers are append-only)")
-            continue
-        cur = load_yaml(cur_p)
-        old_r, new_r = old.get("releases", []), cur.get("releases", [])
-        if new_r[: len(old_r)] != old_r:
-            problems.append(f"{name}: existing release entries were modified or removed")
+    for sub, key in (("registry/releases/", "releases"), ("registry/lifecycle/", "events")):
+        res = subprocess.run(["git", "-C", str(root), "ls-tree", "-r", "--name-only", base, sub], capture_output=True, text=True)
+        if res.returncode != 0:
+            raise SystemExit(f"git ls-tree failed for {base}: {res.stderr.strip()}")
+        for name in filter(None, res.stdout.splitlines()):
+            show = subprocess.run(["git", "-C", str(root), "show", f"{base}:{name}"], capture_output=True, text=True)
+            old = yaml.safe_load(show.stdout) or {}
+            cur_p = root / name
+            if not cur_p.exists():
+                problems.append(f"{name}: deleted (append-only)")
+                continue
+            old_r, new_r = old.get(key, []), load_yaml(cur_p).get(key, [])
+            if new_r[: len(old_r)] != old_r:
+                problems.append(f"{name}: existing entries were modified or removed")
     return problems
 
 
@@ -188,52 +242,67 @@ TODO: triggers and non-triggers.
 
 ## Output
 
-TODO: shape of the result, matching manifest outputs.
+TODO: shape of the result, matching spec.outputs.
 
 ## Guardrails
 
 - TODO: what the agent must not do; when to stop or ask a human.
 """
 
-TEMPLATE_MANIFEST = """schema: zeptly.skill/v1
-id: zsk.{name}
-name: {name}
-title: {title}
-description: "TODO: one or two sentences on what this skill does and when an agent should use it."
-domain: {domain}
-version: 0.1.0
-status: candidate
-tags: []
-authorship:
+TEMPLATE_MANIFEST = """apiVersion: registry.zeptly.dev/v1alpha1
+kind: SkillBlueprint
+metadata:
+  id: {name}
+  version: 0.1.0
+  registry: skills
+  origin:
+    type: authored
+  maturity: candidate
+  lifecycle: active
+spec:
+  title: {title}
+  description: "TODO: one or two sentences on what this skill does and when an agent should use it."
+  domain: {domain}
+  stage: drafted
+  tags: []
+  stewardship:
+    maintainers: ["@TODO"]
+  trust:
+    tier: first-party
+  compatibility:
+    protocol: 1
+    agent_classes: [execution]
+  requires:
+    capabilities: []
+  inputs:
+    - {{name: task, type: string, description: What the agent is asked to do.}}
+  outputs:
+    - {{name: result, type: markdown, description: TODO}}
+  security_profile:
+    data_sensitivity: [public]
+    side_effects: none
+    permissions: []
+    authentication: {{required: false}}
+    hitl: {{required: false}}
+  evaluation:
+    suite: evals/suite.yaml
+    min_pass_rate: 0.8
+references: []
+provenance:
+  createdAt: "{now}"
   authors:
     - {{name: TODO, kind: human}}
-  maintainers: ["@TODO"]
-provenance:
-  origin: human-authored
-  trust_tier: first-party
-compatibility:
-  protocol: 1
-  agent_classes: [execution]
-requires:
-  capabilities: []
-inputs:
-  - {{name: task, type: string, description: What the agent is asked to do.}}
-outputs:
-  - {{name: result, type: markdown, description: TODO}}
+  sourceRefs: []
+  transformations: []
 security:
   classification: low
-  data_sensitivity: [public]
-  side_effects: none
-  permissions: []
-  authentication: {{required: false}}
-  hitl: {{required: false}}
-evaluation:
-  suite: evals/suite.yaml
-  min_pass_rate: 0.8
+  capabilities: []
+  approvals: []
+attestations: []
 """
 
 TEMPLATE_SUITE = """schema: zeptly.eval-suite/v1
-skill: zsk.{name}
+skill: {name}
 description: TODO
 environment: {{mode: recorded}}
 cases:
@@ -250,19 +319,19 @@ cases:
 """
 
 
-def scaffold(root: Path, domain: str, name: str) -> Path:
+def scaffold(root: Path, domain: str, name: str, tier: str = "candidates") -> Path:
     if not re.match(r"^[a-z0-9]+(-[a-z0-9]+)*$", name):
         raise SystemExit("name must be lowercase-hyphenated")
-    d = root / "candidates" / domain / name
+    d = root / tier / domain / name
     if d.exists():
         raise SystemExit(f"{d} exists")
     title = name.replace("-", " ").title()
+    now = dt.datetime.now(dt.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
     for rel, tpl in (("SKILL.md", TEMPLATE_SKILL), ("manifest.yaml", TEMPLATE_MANIFEST), ("evals/suite.yaml", TEMPLATE_SUITE)):
         p = d / rel
         p.parent.mkdir(parents=True, exist_ok=True)
-        p.write_text(tpl.format(name=name, title=title, domain=domain), encoding="utf-8")
-    (d / "examples").mkdir(exist_ok=True)
-    (d / "provenance").mkdir(exist_ok=True)
-    (d / "examples" / ".gitkeep").write_text("")
-    (d / "provenance" / ".gitkeep").write_text("")
+        p.write_text(tpl.format(name=name, title=title, domain=domain, now=now), encoding="utf-8")
+    for sub in ("examples", "provenance"):
+        (d / sub).mkdir(exist_ok=True)
+        (d / sub / ".gitkeep").write_text("")
     return d

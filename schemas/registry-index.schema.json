@@ -1,0 +1,96 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://registry.zeptly.dev/schemas/registry-index/v1alpha1.json",
+  "title": "Deterministic registry index (derived data)",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "apiVersion",
+    "kind",
+    "registry",
+    "entries"
+  ],
+  "properties": {
+    "apiVersion": {
+      "const": "registry.zeptly.dev/v1alpha1"
+    },
+    "kind": {
+      "const": "RegistryIndex"
+    },
+    "registry": {
+      "const": "skills"
+    },
+    "namespace": {
+      "enum": [
+        "production",
+        "synthetic"
+      ]
+    },
+    "entries": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "kind",
+          "id",
+          "version",
+          "digest",
+          "maturity",
+          "lifecycle",
+          "origin",
+          "location"
+        ],
+        "properties": {
+          "kind": {
+            "type": "string"
+          },
+          "id": {
+            "type": "string"
+          },
+          "version": {
+            "type": "string"
+          },
+          "digest": {
+            "type": "string",
+            "pattern": "^sha256:[0-9a-f]{64}$"
+          },
+          "maturity": {
+            "enum": [
+              "candidate",
+              "canonical"
+            ]
+          },
+          "lifecycle": {
+            "enum": [
+              "active",
+              "deprecated",
+              "revoked"
+            ]
+          },
+          "origin": {
+            "type": "object"
+          },
+          "location": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "path"
+            ],
+            "properties": {
+              "path": {
+                "type": "string"
+              },
+              "tag": {
+                "type": "string"
+              }
+            }
+          },
+          "extensions": {
+            "type": "object"
+          }
+        }
+      }
+    }
+  }
+}

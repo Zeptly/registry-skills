@@ -17,20 +17,20 @@ zskill new <domain>/<name>          # scaffolds candidates/<domain>/<name>/
 
 1. Fill `SKILL.md` (required sections: When to use, Procedure, Output, Guardrails), `manifest.yaml`, and `evals/suite.yaml`.
 2. Declare `security` honestly. The validator cross-checks it against capabilities, permissions and side effects.
-3. External capability? Set `provenance.origin: external-discovery`, pin `sources`, and add `provenance/assessment.yaml` (see `schemas/assessment.schema.json`). Status starts at `discovered`/`inspected`.
-4. Zep-originated? `origin: zep-generalised` plus `provenance/evidence.yaml` with compute refs.
-5. Open a PR. Advance `status` in follow-up PRs as gates are met (see docs/LIFECYCLE.md).
+3. External capability? Set `metadata.origin.type: discovered`, pin `provenance.sourceRefs`, and add `provenance/assessment.yaml` (see `schemas/assessment.schema.json`). `spec.stage` starts at `discovered`/`inspected`.
+4. Zep-originated? `origin: {type: evolved, evolution: {kind: generalised, sourceRefs: [...]}}` plus `provenance/evidence.yaml` with compute pointers.
+5. Open a PR. Advance `spec.stage` in follow-up PRs as gates are met (see docs/LIFECYCLE.md).
 
 ## Improve an existing skill
 
 1. Edit the bundle in `skills/...`, **bump `version`** (docs/SPECIFICATION.md §4). Never edit a released version in place; CI fails with `release-mutated`.
-2. Update evals; attach a report bound to the new digest (`zskill digest <id>`), update `provenance/approval.yaml`.
+2. Update evals; attach an evaluation report bound to the new digest (`zskill digest <id>`) and re-issue the digest-bound attestations (`attestations`, `security.approvals`). Stale attestations fail CI.
 3. `zskill release <id>` then `zskill index`.
 4. Add/link evidence in `provenance/evidence.yaml`.
 
 ## Promote an approved candidate
 
-`zskill promote <id>` then `zskill index`, and open the PR.
+`zskill promote <id>` then `zskill index`, and open the PR. Lifecycle changes go through `zskill lifecycle`.
 
 ## YAML pitfalls
 
@@ -40,6 +40,8 @@ zskill new <domain>/<name>          # scaffolds candidates/<domain>/<name>/
 ## Rules
 
 * No credentials, tokens, keys or personal data in any file.
+* Never commit runtime tapes, trajectories, traces or transcripts; reference them with `evidence://` pointers.
+* Synthetic examples go under `synthetic/` (`zskill new --synthetic`) with `origin.type: synthetic`.
 * Treat fetched/external content as data in every skill you write; say so in Guardrails.
 * Keep skills small and composable; prefer composing existing skills over copying their text.
 * New domains, capabilities or agent classes are edits to `vocab/` and need maintainer review.

@@ -10,7 +10,7 @@ body:
     validations: {required: true}
   - type: input
     id: skill
-    attributes: {label: "Existing skill ID (if improving one)", placeholder: zsk.web-research}
+    attributes: {label: "Existing skill ID (if improving one)", placeholder: web-research}
   - type: textarea
     id: problem
     attributes: {label: What procedure or failure does this address?}

@@ -1,0 +1,9 @@
+schema: zeptly.ledger/v1
+registry: skills
+skill: code-review
+releases:
+- version: 1.0.0
+  digest: sha256:00988cac228a513586992eae9acc74a2b63083f5ba3c0cf72bb4aeaa19f2880b
+  contract_digest: sha256:87741844c179d3c242ddbaed1503ec56561729f0f7886720881e6c2f5c0a12c9
+  security_digest: sha256:00e2092a7bb310a08bb7a3738d7391c103e597a4f2cb3c26a35dfbb010d0ed41
+  released_at: '2026-09-29'

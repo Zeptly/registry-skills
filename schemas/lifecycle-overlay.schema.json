@@ -1,0 +1,89 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://registry.zeptly.dev/schemas/lifecycle-overlay/v1.json",
+  "title": "Lifecycle overlay (registry/lifecycle/<id>.yaml)",
+  "description": "Append-only events. The effective lifecycle of a version is the state of its latest event (default: active).",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "apiVersion",
+    "kind",
+    "registry",
+    "id",
+    "events"
+  ],
+  "properties": {
+    "apiVersion": {
+      "const": "registry.zeptly.dev/v1alpha1"
+    },
+    "kind": {
+      "const": "LifecycleOverlay"
+    },
+    "registry": {
+      "const": "skills"
+    },
+    "id": {
+      "type": "string",
+      "pattern": "^[a-z0-9]+(-[a-z0-9]+)*$"
+    },
+    "events": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "version",
+          "state",
+          "at",
+          "reason"
+        ],
+        "properties": {
+          "version": {
+            "type": "string",
+            "pattern": "^\\d+\\.\\d+\\.\\d+(-[0-9A-Za-z.-]+)?$"
+          },
+          "state": {
+            "enum": [
+              "active",
+              "deprecated",
+              "revoked"
+            ]
+          },
+          "at": {
+            "type": "string",
+            "format": "date"
+          },
+          "reason": {
+            "type": "string",
+            "minLength": 5,
+            "maxLength": 500
+          },
+          "replacedBy": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "registry",
+              "id",
+              "version"
+            ],
+            "properties": {
+              "registry": {
+                "type": "string"
+              },
+              "id": {
+                "type": "string"
+              },
+              "version": {
+                "type": "string"
+              }
+            }
+          },
+          "sunset": {
+            "type": "string",
+            "format": "date"
+          }
+        }
+      }
+    }
+  }
+}
