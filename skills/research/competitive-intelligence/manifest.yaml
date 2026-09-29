@@ -4,7 +4,7 @@ metadata:
   id: competitive-intelligence
   version: 1.0.0
   registry: skills
-  origin: {type: authored}
+  origin: {type: native}
   maturity: canonical
   lifecycle: active
 spec:
@@ -58,6 +58,6 @@ security:
   classification: low
   capabilities: [cap.web.search, cap.web.fetch]
   approvals:
-  - {type: governance, ref: 'bundle:provenance/approval.yaml', subjectDigest: 'sha256:f597943142aee89683057c680b81dd4765e3fee59b1ddaf73c48d1cf4824e411',
+  - {type: governance, ref: 'bundle:provenance/approval.yaml', subjectDigest: 'sha256:32e2b634e6e30675a07a7c71840937c425476b0fc0ec1cc73fe2df5af69bf66b',
     issuedAt: '2026-09-29'}
 attestations: []

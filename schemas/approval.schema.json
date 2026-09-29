@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://registry.zeptly.dev/schemas/approval/v2.json",
+  "$id": "https://registry.zeptly.dev/schemas/approval/v3.json",
   "title": "Governed approval record (provenance/approval.yaml)",
   "type": "object",
   "additionalProperties": false,
@@ -34,7 +34,7 @@
         },
         "id": {
           "type": "string",
-          "pattern": "^[a-z0-9]+(-[a-z0-9]+)*$"
+          "pattern": "^[a-z0-9]+([.-][a-z0-9]+)*$"
         },
         "version": {
           "type": "string",
@@ -68,21 +68,29 @@
     "basis": {
       "enum": [
         "evaluation",
-        "waiver"
+        "protocol-exception"
       ]
     },
     "evaluationRef": {
       "type": "string",
       "description": "bundle:<path> of the evaluation report this approval relies on."
     },
-    "waiver": {
+    "notes": {
+      "type": "string"
+    },
+    "exception": {
       "type": "object",
       "additionalProperties": false,
       "required": [
+        "rule",
         "reason",
         "expiresOnVersion"
       ],
+      "description": "Explicit, temporary exception to a protocol rule. Expires when the artifact reaches expiresOnVersion; must be ratified or replaced by executed evaluations.",
       "properties": {
+        "rule": {
+          "const": "promotion.required-evaluations"
+        },
         "reason": {
           "type": "string",
           "minLength": 10
@@ -91,9 +99,6 @@
           "type": "string"
         }
       }
-    },
-    "notes": {
-      "type": "string"
     }
   }
 }

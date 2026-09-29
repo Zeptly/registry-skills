@@ -4,7 +4,7 @@ metadata:
   id: github-pr-triage
   version: 0.1.0
   registry: skills
-  origin: {type: discovered}
+  origin: {type: upstream-seed}
   maturity: candidate
   lifecycle: active
 spec:
@@ -12,7 +12,6 @@ spec:
   description: Triage open pull requests by classifying, prioritising and proposing labels and reviewer assignments,
     applying changes only after human confirmation. Use when a maintainer wants a repository's PR queue sorted.
   domain: integrations
-  stage: inspected
   tags: [github, mcp, triage]
   stewardship:
     maintainers: ['@Zeptly/registry-maintainers']
@@ -50,13 +49,14 @@ spec:
       required: true
       triggers: [any label change, any reviewer request, any comment, any state change]
   evaluation: {suite: evals/suite.yaml, min_pass_rate: 0.9}
+  markers: {provenance: discovered}
 references: []
 provenance:
   createdAt: '2026-09-29T00:00:00Z'
   authors:
   - {name: Zeptly registry maintainers, kind: human}
   sourceRefs:
-  - {kind: mcp-server, uri: 'https://github.com/github/github-mcp-server', retrievedAt: 2026-09-29}
+  - {kind: mcp-server, uri: 'https://github.com/github/github-mcp-server', retrievedAt: '2026-09-29'}
   transformations: []
 security:
   classification: moderate

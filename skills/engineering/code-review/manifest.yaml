@@ -4,7 +4,7 @@ metadata:
   id: code-review
   version: 1.0.0
   registry: skills
-  origin: {type: authored}
+  origin: {type: native}
   maturity: canonical
   lifecycle: active
 spec:
@@ -58,6 +58,6 @@ security:
   classification: moderate
   capabilities: [cap.code.read, cap.vcs.read]
   approvals:
-  - {type: governance, ref: 'bundle:provenance/approval.yaml', subjectDigest: 'sha256:00988cac228a513586992eae9acc74a2b63083f5ba3c0cf72bb4aeaa19f2880b',
+  - {type: governance, ref: 'bundle:provenance/approval.yaml', subjectDigest: 'sha256:9fe40802586d8aac4eba65e342dcec386f56b78f40bc025f2bfd70e403d92c3e',
     issuedAt: '2026-09-29'}
 attestations: []

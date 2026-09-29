@@ -4,7 +4,7 @@ metadata:
   id: structured-data-extraction
   version: 1.0.0
   registry: skills
-  origin: {type: authored}
+  origin: {type: native}
   maturity: canonical
   lifecycle: active
 spec:
@@ -49,6 +49,6 @@ security:
   classification: moderate
   capabilities: [cap.doc.parse, cap.llm.structured, cap.fs.read]
   approvals:
-  - {type: governance, ref: 'bundle:provenance/approval.yaml', subjectDigest: 'sha256:0222bc6d765b4464dd44e5faf46b99d8e2f1c0331a999e386554972ee642e64e',
+  - {type: governance, ref: 'bundle:provenance/approval.yaml', subjectDigest: 'sha256:77fc96d1a49c42631f1f7d6b52d8c1fdc8d84df9a6c4fc12925c7361136cf6c6',
     issuedAt: '2026-09-29'}
 attestations: []

@@ -1,27 +1,42 @@
-"""Loading skill bundles from the repository and computing digests."""
+"""Loading skill bundles from the repository; canonical JSON, directory seal and artifact digest.
+
+Digest model (Registry Protocol v0.1 normalization):
+
+  directory_seal  = sha256 over the canonical payload files (SKILL.md, evals/, examples/, ...)
+  artifact digest = sha256( JCS({"manifest": <projection>, "directorySeal": <seal>}) )
+
+The manifest projection INCLUDES identity (apiVersion, kind, metadata.id/registry/origin), spec, references,
+provenance and security.classification/capabilities. It EXCLUDES metadata.version, metadata.maturity,
+metadata.lifecycle, attestations and security.approvals (governance state that changes about, or binds to,
+a fixed artifact). Files under provenance/ and CHANGELOG.md are outside the seal.
+"""
 from __future__ import annotations
 
-import copy
 import hashlib
 import json
+import math
+import os
 import re
 from dataclasses import dataclass, field
+from decimal import Decimal
 from pathlib import Path
 
 import yaml
 
 TIERS = ("skills", "candidates", "synthetic")
 PRODUCTION_TIERS = ("skills", "candidates")
-# Files excluded from the version digest: evidence and approvals accumulate
-# *about* a version without changing it; the changelog is human commentary.
-DIGEST_EXCLUDED_TOP = {"provenance", "CHANGELOG.md"}
-# Manifest paths excluded from the digest. These are governance state that changes
-# *about* a fixed version (promotion, lifecycle, attestations that bind to the digest);
-# including them would make the digest circular or make promotion change identity.
-DIGEST_EXCLUDED_MANIFEST_PATHS = (
-    ("metadata", "maturity"), ("metadata", "lifecycle"), ("spec", "stage"),
-    ("attestations",), ("security", "approvals"),
-)
+# Not part of the canonical payload seal: evidence/approvals accumulate *about* an artifact, the changelog
+# is commentary, .gitkeep is a placeholder, and manifest.yaml is covered by the manifest projection.
+SEAL_EXCLUDED_TOP = {"provenance", "CHANGELOG.md"}
+SEAL_EXCLUDED_NAMES = {".gitkeep", "manifest.yaml"}
+# Manifest projection is an explicit include-list (see module docstring).
+PROJECTION_TOP = ("apiVersion", "kind", "spec", "references", "provenance")
+
+
+def normalize_text(data: bytes) -> bytes:
+    """Line-ending policy: CRLF and lone CR become LF. No other transformation (no BOM strip, no trim)."""
+    return data.replace(b"\r\n", b"\n").replace(b"\r", b"\n")
+
 
 _FM = re.compile(r"\A---\r?\n(.*?)\r?\n---\r?\n?(.*)\Z", re.S)
 
@@ -53,8 +68,95 @@ def sha256_hex(data: bytes) -> str:
     return hashlib.sha256(data).hexdigest()
 
 
+def _jcs_number(v) -> str:
+    if isinstance(v, bool):
+        raise TypeError("bool is not a number")
+    if isinstance(v, int):
+        if abs(v) > 2**53:
+            raise ValueError("integer outside the IEEE-754 safe range is not representable in JCS")
+        return str(v)
+    if math.isnan(v) or math.isinf(v):
+        raise ValueError("NaN/Infinity are not valid JSON")
+    if v == 0:
+        return "0"
+    a = abs(v)
+    if a < 1e-6 or a >= 1e16:
+        raise ValueError("float magnitude outside the supported plain-decimal range (avoid exponent forms in manifests)")
+    r = repr(v)
+    if "e" in r or "E" in r:  # ES6 Number::toString uses plain decimals for 1e-6 <= |v| < 1e21
+        r = format(Decimal(r), "f")
+    return r[:-2] if r.endswith(".0") else r
+
+
+def _jcs(v, out: list):
+    if v is None:
+        out.append("null")
+    elif v is True:
+        out.append("true")
+    elif v is False:
+        out.append("false")
+    elif isinstance(v, str):
+        out.append(json.dumps(v, ensure_ascii=False))  # JCS string escaping == RFC 8259 minimal escaping
+    elif isinstance(v, (int, float)):
+        out.append(_jcs_number(v))
+    elif isinstance(v, (list, tuple)):
+        out.append("[")
+        for i, x in enumerate(v):
+            if i:
+                out.append(",")
+            _jcs(x, out)
+        out.append("]")
+    elif isinstance(v, dict):
+        if not all(isinstance(k, str) for k in v):
+            raise TypeError("object keys must be strings")
+        out.append("{")
+        # RFC 8785 §3.2.3: sort by UTF-16 code units of the property names (NOT by code point)
+        for i, k in enumerate(sorted(v, key=lambda k: k.encode("utf-16-be"))):
+            if not isinstance(k, str):
+                raise TypeError("object keys must be strings")
+            if i:
+                out.append(",")
+            out.append(json.dumps(k, ensure_ascii=False))
+            out.append(":")
+            _jcs(v[k], out)
+        out.append("}")
+    else:
+        raise TypeError(f"unsupported type for canonical JSON: {type(v).__name__}")
+
+
 def canonical_json(obj) -> bytes:
-    return json.dumps(obj, sort_keys=True, separators=(",", ":"), ensure_ascii=False).encode()
+    """RFC 8785 (JCS) serialization, UTF-8 encoded."""
+    out: list = []
+    _jcs(obj, out)
+    return "".join(out).encode("utf-8")
+
+
+def cp_key(s: str) -> tuple:
+    """Explicit, locale-independent Unicode code-point ordering key."""
+    return tuple(ord(c) for c in s)
+
+
+def manifest_projection(manifest: dict) -> dict:
+    sec = manifest.get("security") or {}
+    proj = {k: manifest.get(k) for k in PROJECTION_TOP}
+    meta = manifest.get("metadata") or {}
+    proj["metadata"] = {"id": meta.get("id"), "registry": meta.get("registry"), "origin": meta.get("origin")}
+    proj["security"] = {"classification": sec.get("classification"), "capabilities": sec.get("capabilities")}
+    return proj
+
+
+def walk_bundle(root: Path):
+    """Yield (relpath, path, is_symlink) for every entry below root, never following symlinks.
+    Order: explicit code-point order of the posix relative path."""
+    found = []
+    for dp, dns, fns in os.walk(root, followlinks=False):
+        for name in [*dns, *fns]:
+            p = Path(dp) / name
+            if p.is_symlink():
+                found.append((p.relative_to(root).as_posix(), p, True))
+            elif p.is_file():
+                found.append((p.relative_to(root).as_posix(), p, False))
+    return sorted(found, key=lambda t: cp_key(t[0]))
 
 
 @dataclass
@@ -97,7 +199,7 @@ class Bundle:
         p = self.path / "SKILL.md"
         if not p.exists():
             return None, ""
-        text = p.read_text(encoding="utf-8").replace("\r\n", "\n")
+        text = normalize_text(p.read_bytes()).decode("utf-8")
         m = _FM.match(text)
         if not m:
             return None, text
@@ -108,28 +210,37 @@ class Bundle:
         return (fm if isinstance(fm, dict) else None), m.group(2)
 
     def files(self) -> list[Path]:
-        out = []
-        for p in sorted(self.path.rglob("*")):
-            if p.is_file():
-                out.append(p)
-        return out
+        """Regular files only; symlinks are never followed (the validator rejects them)."""
+        return [p for _, p, link in walk_bundle(self.path) if not link]
+
+    def symlinks(self) -> list[Path]:
+        return [p for _, p, link in walk_bundle(self.path) if link]
+
+    def stage(self) -> str | None:
+        """Candidate workflow stage (sidecar provenance/stage.yaml, outside the artifact digest)."""
+        p = self.path / "provenance" / "stage.yaml"
+        if not p.is_file() or p.is_symlink():
+            return None
+        data = load_yaml(p)
+        return data.get("stage") if isinstance(data, dict) else None
 
     # ---- digests -------------------------------------------------------
-    def digest(self) -> str:
-        lines = []
-        for p in self.files():
-            rel = p.relative_to(self.path).as_posix()
-            if rel.split("/")[0] in DIGEST_EXCLUDED_TOP:
+    def payload_files(self) -> list[tuple[str, Path]]:
+        out = []
+        for rel, p, link in walk_bundle(self.path):
+            if link or rel.split("/")[0] in SEAL_EXCLUDED_TOP or rel.split("/")[-1] in SEAL_EXCLUDED_NAMES:
                 continue
-            if rel == "manifest.yaml":
-                h = sha256_hex(canonical_json(digest_view(self.manifest)))
-            else:
-                data = p.read_bytes()
-                if p.suffix in (".md", ".yaml", ".yml", ".json", ".txt"):
-                    data = data.replace(b"\r\n", b"\n")
-                h = sha256_hex(data)
-            lines.append(f"{rel}\0{h}\n")
-        return "sha256:" + sha256_hex("".join(lines).encode())
+            out.append((rel, p))
+        return out
+
+    def directory_seal(self) -> str:
+        """sha256 over canonical payload files: lines of `<relpath>\\0<sha256(normalized bytes)>\\n`."""
+        lines = [f"{rel}\0{sha256_hex(normalize_text(p.read_bytes()))}\n" for rel, p in self.payload_files()]
+        return "sha256:" + sha256_hex("".join(lines).encode("utf-8"))
+
+    def digest(self) -> str:
+        doc = {"manifest": manifest_projection(self.manifest), "directorySeal": self.directory_seal()}
+        return "sha256:" + sha256_hex(canonical_json(doc))
 
     def contract_digest(self) -> str:
         sp = self.spec
@@ -146,20 +257,6 @@ class Bundle:
         subset = {"profile": self.spec.get("security_profile"),
                   "classification": sec.get("classification"), "capabilities": sec.get("capabilities")}
         return "sha256:" + sha256_hex(canonical_json(subset))
-
-
-def digest_view(manifest: dict) -> dict:
-    """Manifest with governance-state paths removed (see DIGEST_EXCLUDED_MANIFEST_PATHS)."""
-    m = copy.deepcopy(manifest)
-    for path in DIGEST_EXCLUDED_MANIFEST_PATHS:
-        node = m
-        for k in path[:-1]:
-            node = node.get(k) if isinstance(node, dict) else None
-            if node is None:
-                break
-        if isinstance(node, dict):
-            node.pop(path[-1], None)
-    return m
 
 
 def load_bundles(root: Path) -> list[Bundle]:

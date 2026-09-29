@@ -31,19 +31,23 @@ def test_indexes_are_current():
     assert not (REPO / "registry/index.synthetic.json").exists()
 
 
-def test_seed_waivers_preserved():
+def test_seed_exceptions_are_explicit_and_preserved():
+    """Decision: the six seeds stay canonical ONLY under an explicit, temporary protocol exception."""
     for sid in ("web-research", "source-evaluation", "structured-comparison", "competitive-intelligence",
                 "code-review", "structured-data-extraction"):
         b = ops.find(Registry(REPO), sid)
         ap = yaml.safe_load((b.path / "provenance/approval.yaml").read_text())
-        assert ap["basis"] == "waiver" and ap["waiver"]["expiresOnVersion"] == "1.1.0"
+        assert ap["basis"] == "protocol-exception"
+        assert ap["exception"]["rule"] == "promotion.required-evaluations" and ap["exception"]["expiresOnVersion"] == "1.1.0"
+        assert ap["exception"]["reason"].startswith("Registry bootstrap seed skill; suite is structurally validated")
+    assert "protocol-exception" in codes(REPO, "warning")  # CI-visible
     idx = json.loads((REPO / "registry/index.json").read_text())
     assert {e["extensions"]["skills"]["evidenceLevel"] for e in idx["entries"] if e["maturity"] == "canonical"} == {"unevaluated"}
 
 
 def test_candidate_not_promoted_and_verdict_preserved():
     b = ops.find(Registry(REPO), "github-pr-triage")
-    assert b.tier == "candidates" and b.spec["stage"] == "inspected"
+    assert b.tier == "candidates" and b.stage() == "inspected"
     a = yaml.safe_load((b.path / "provenance/assessment.yaml").read_text())
     assert a["verdict"] == "needs-more-inspection"
 
@@ -79,9 +83,11 @@ def test_maturity_must_match_location(reg):
 
 
 def test_candidate_needs_stage_canonical_forbids_it(reg):
-    edit_manifest(reg, CAND, lambda m: m["spec"].pop("stage"))
+    (reg / CAND / "provenance/stage.yaml").unlink()
     assert "stage-missing" in codes(reg)
-    edit_manifest(reg, WR, lambda m: m["spec"].update(stage="approved"))
+    (reg / CAND / "provenance/stage.yaml").write_text("stage: nonsense\n")
+    assert "stage-invalid" in codes(reg)
+    (reg / WR / "provenance/stage.yaml").write_text("stage: approved\n")
     assert "stage-canonical" in codes(reg)
 
 
@@ -90,22 +96,65 @@ def test_maturity_origin_lifecycle_are_independent_fields(reg):
     d0 = digest(reg, "web-research")
     ops.set_lifecycle(reg, "web-research", "1.0.0", "deprecated", "superseded in test")
     b = ops.find(Registry(reg), "web-research")
-    assert (b.meta["maturity"], b.meta["origin"]["type"], b.meta["lifecycle"]) == ("canonical", "authored", "deprecated")
+    assert (b.meta["maturity"], b.meta["origin"]["type"], b.meta["lifecycle"]) == ("canonical", "native", "deprecated")
     assert b.digest() == d0
     assert codes(reg) == []
 
 
-def test_digest_excludes_governance_state(reg):
+def test_digest_excludes_only_governance_state_and_version(reg):
     d0 = digest(reg, "web-research")
-    edit_manifest(reg, WR, lambda m: m["attestations"].append(
-        {"type": "evaluation", "ref": "evidence://x/1", "subjectDigest": d0}))
-    edit_manifest(reg, WR, lambda m: m["metadata"].update(lifecycle="active"))
-    assert digest(reg, "web-research") == d0
+    edit_manifest(reg, WR, lambda m: m["attestations"].append({"type": "evaluation", "ref": "evidence://x/1", "subjectDigest": d0}))
+    edit_manifest(reg, WR, lambda m: m["metadata"].update(lifecycle="active", version="1.0.7"))
     (reg / WR / "provenance/notes.md").write_text("evidence note")
+    (reg / WR / "CHANGELOG.md").write_text("changes")
     assert digest(reg, "web-research") == d0
-    # but origin is intrinsic identity
-    edit_manifest(reg, WR, lambda m: m["metadata"]["origin"].update(type="imported"))
-    assert digest(reg, "web-research") != d0
+
+
+@pytest.mark.parametrize("mutate", [
+    lambda m: m["metadata"]["origin"].update(type="upstream-seed"),                    # identity: origin
+    lambda m: m["metadata"].update(id="web-research-x"),                              # identity: id
+    lambda m: m["spec"].update(title="Different Title"),                              # spec
+    lambda m: m["references"].append({"registry": "tiny-agents", "id": "x.y", "version": "^1.0.0", "digest": None}),  # references
+    lambda m: m["provenance"].update(createdAt="2027-01-01T00:00:00Z"),               # provenance
+    lambda m: m["security"].update(classification="moderate"),                        # security classification
+    lambda m: m["security"]["capabilities"].append("cap.extra.thing"),                # security capabilities
+])
+def test_digest_includes_identity_spec_references_provenance_security(reg, mutate):
+    def at(root):
+        return next(b for b in Registry(root).bundles if b.rel == WR).digest()
+    d0 = at(reg)
+    edit_manifest(reg, WR, mutate)
+    assert at(reg) != d0
+
+
+def test_directory_seal_is_separate_and_covers_payload_only(reg):
+    b = ops.find(Registry(reg), "web-research")
+    seal, dig = b.directory_seal(), b.digest()
+    edit_manifest(reg, WR, lambda m: m["spec"].update(title="Different Title"))
+    b = ops.find(Registry(reg), "web-research")
+    assert b.directory_seal() == seal and b.digest() != dig          # manifest change: digest only
+    (reg / WR / "provenance/notes.md").write_text("x")
+    (reg / WR / "CHANGELOG.md").write_text("x")
+    assert ops.find(Registry(reg), "web-research").directory_seal() == seal
+    (reg / WR / "examples/example-1.md").write_text("changed payload\n")
+    assert ops.find(Registry(reg), "web-research").directory_seal() != seal
+    led = load(reg, "registry/releases/web-research.yaml")["releases"][0]
+    assert led["directory_seal"] == seal and led["digest"] == dig
+
+
+def test_release_mutated_reports_seal_or_digest(reg):
+    (reg / WR / "examples/example-1.md").write_text("changed payload\n")
+    assert "release-mutated" in codes(reg)
+
+
+def test_line_endings_do_not_change_digest(reg):
+    d0 = digest(reg, "web-research")
+    for p in (reg / WR).rglob("*.md"):
+        p.write_bytes(p.read_bytes().replace(b"\n", b"\r\n"))
+    assert digest(reg, "web-research") == d0
+    for p in (reg / WR).rglob("*.md"):
+        p.write_bytes(p.read_bytes().replace(b"\r\n", b"\r"))
+    assert digest(reg, "web-research") == d0
 
 
 def test_lifecycle_mirror_must_match_overlay(reg):
@@ -361,11 +410,18 @@ def test_eval_report_binding_and_threshold(reg):
     assert "report-threshold" in codes(reg)
 
 
-def test_waiver_expires(reg):
+def test_protocol_exception_expires(reg):
     ap = load(reg, WR + "/provenance/approval.yaml")
-    ap["waiver"]["expiresOnVersion"] = "1.0.0"
+    ap["exception"]["expiresOnVersion"] = "1.0.0"
     save(reg, WR + "/provenance/approval.yaml", ap)
-    assert "waiver-expired" in codes(reg)
+    assert "exception-expired" in codes(reg)
+
+
+def test_exception_requires_block_and_evaluation_forbids_it(reg):
+    ap = load(reg, WR + "/provenance/approval.yaml")
+    ap.pop("exception")
+    save(reg, WR + "/provenance/approval.yaml", ap)
+    assert {"approval-schema", "approval-exception"} & set(codes(reg))
 
 
 def test_high_classification_needs_security_reviewer(reg):
@@ -378,9 +434,9 @@ def test_high_classification_needs_security_reviewer(reg):
 def test_candidate_version_must_exceed_canonical(reg):
     import shutil
     shutil.copytree(reg / WR, reg / "candidates/research/web-research")
+    (reg / "candidates/research/web-research/provenance/stage.yaml").write_text("stage: drafted\n")
     edit_manifest(reg, "candidates/research/web-research", lambda m: (
-        m["metadata"].update(maturity="candidate", version="0.9.0"), m["spec"].update(stage="drafted"),
-        m["security"].update(approvals=[])))
+        m["metadata"].update(maturity="candidate", version="0.9.0"), m["security"].update(approvals=[])))
     assert "candidate-version" in codes(reg)
     edit_manifest(reg, "candidates/research/web-research", lambda m: m["metadata"].update(version="1.1.0"))
     assert "candidate-version" not in codes(reg)
@@ -397,18 +453,19 @@ def test_duplicate_identity(reg):
 
 
 def test_unreviewed_external_cannot_be_approved(reg):
-    edit_manifest(reg, CAND, lambda m: m["spec"].update(stage="approved"))
+    (reg / CAND / "provenance/stage.yaml").write_text("stage: approved\n")
     assert "prov-unreviewed" in codes(reg)
 
 
 def test_external_verdict_blocks_progress(reg):
-    edit_manifest(reg, CAND, lambda m: m["spec"].update(stage="drafted"))
+    (reg / CAND / "provenance/stage.yaml").write_text("stage: drafted\n")
     assert "prov-verdict" in codes(reg)
 
 
 def _make_promotable(reg):
+    (reg / CAND / "provenance/stage.yaml").write_text("stage: approved\n")
+
     def ready(m):
-        m["spec"].update(stage="approved")
         m["spec"]["trust"]["tier"] = "reviewed-third-party"
         m["provenance"]["sourceRefs"][0]["ref"] = "v0.0.0-test"
         m["metadata"]["version"] = "1.0.0"
@@ -419,8 +476,8 @@ def _make_promotable(reg):
     save(reg, CAND + "/provenance/approval.yaml", {
         "apiVersion": "registry.zeptly.dev/v1alpha1", "kind": "Approval",
         "subject": {"registry": "skills", "id": "github-pr-triage", "version": "1.0.0", "digest": d},
-        "approvedBy": ["@a"], "approvedAt": "2026-09-29", "basis": "waiver",
-        "waiver": {"reason": "test waiver reason", "expiresOnVersion": "1.1.0"}})
+        "approvedBy": ["@a"], "approvedAt": "2026-09-29", "basis": "protocol-exception",
+        "exception": {"rule": "promotion.required-evaluations", "reason": "test exception reason", "expiresOnVersion": "1.1.0"}})
     edit_manifest(reg, CAND, lambda m: m["security"]["approvals"].append(
         {"type": "governance", "ref": "bundle:provenance/approval.yaml", "subjectDigest": d}))
 
@@ -431,7 +488,7 @@ def test_promote_flow_preserves_digest_and_attestations(reg):
     before = digest(reg, "github-pr-triage")
     ops.promote(reg, "github-pr-triage")
     b = ops.find(Registry(reg), "github-pr-triage")
-    assert b.tier == "skills" and b.meta["maturity"] == "canonical" and "stage" not in b.spec and b.digest() == before
+    assert b.tier == "skills" and b.meta["maturity"] == "canonical" and b.stage() is None and not (b.path / "provenance/stage.yaml").exists() and b.digest() == before
     assert codes(reg) == []
 
 
@@ -450,21 +507,31 @@ def test_promote_refuses_with_stale_attestation(reg):
 
 # --------------------------------------------------------------- synthetic ---
 def _synthetic(reg):
-    ops.scaffold(reg, "research", "demo-echo", tier="synthetic")
-    edit_manifest(reg, "synthetic/research/demo-echo", lambda m: m["metadata"]["origin"].update(type="synthetic"))
-    return "synthetic/research/demo-echo"
+    rel = str(ops.scaffold(reg, "research", "demo-echo", tier="synthetic").relative_to(reg))
+    return rel
 
 
-def test_synthetic_requires_marking_and_isolation(reg):
+def test_synthetic_scaffold_is_marked_and_structurally_valid(reg):
     rel = _synthetic(reg)
-    assert not [c for c in codes(reg) if c in ("synthetic-marking",)]
-    edit_manifest(reg, rel, lambda m: m["metadata"]["origin"].update(type="authored"))
-    assert "synthetic-marking" in codes(reg)
-    # marked synthetic but placed in a production tier
+    m = load(reg, rel + "/manifest.yaml")
+    assert m["spec"]["markers"] == {"namespace": "synthetic"} and m["metadata"]["origin"]["type"] == "native"
+    assert "synthetic-marking" not in codes(reg)
+
+
+def test_synthetic_marker_required_in_and_only_in_synthetic_tier(reg):
     import shutil
-    edit_manifest(reg, rel, lambda m: m["metadata"]["origin"].update(type="synthetic"))
+    rel = _synthetic(reg)
+    edit_manifest(reg, rel, lambda m: m["spec"].pop("markers"))
+    assert "synthetic-marking" in codes(reg)
+    edit_manifest(reg, rel, lambda m: m["spec"].update(markers={"namespace": "synthetic"}))
     shutil.copytree(reg / rel, reg / "candidates/research/demo-echo")
     assert "synthetic-marking" in codes(reg)
+
+
+def test_synthetic_is_not_a_common_origin_value(reg):
+    rel = _synthetic(reg)
+    edit_manifest(reg, rel, lambda m: m["metadata"]["origin"].update(type="synthetic"))
+    assert "manifest-schema" in codes(reg)
 
 
 def test_synthetic_never_enters_production_index(reg):
@@ -489,7 +556,7 @@ def test_synthetic_id_cannot_collide_with_production(reg):
     import shutil
     rel = _synthetic(reg)
     shutil.copytree(reg / rel, reg / "synthetic/research/web-research")
-    edit_manifest(reg, "synthetic/research/web-research", lambda m: (m["metadata"].update(id="web-research"), m["spec"]["evaluation"]))
+    edit_manifest(reg, "synthetic/research/web-research", lambda m: m["metadata"].update(id="web-research"))
     assert "synthetic-collision" in codes(reg)
 
 
@@ -586,7 +653,7 @@ def test_index_is_deterministic_and_sorted(reg):
 
 def test_index_has_common_fields(reg):
     e = json.loads(ops.index_text(reg))["entries"][0]
-    assert {"kind", "id", "version", "digest", "maturity", "lifecycle", "origin", "location"} <= set(e)
+    assert {"kind", "id", "version", "digest", "directorySeal", "maturity", "lifecycle", "origin", "location"} <= set(e)
     Registry(reg)  # schema-valid index
     from jsonschema import Draft202012Validator
     Draft202012Validator(json.load(open(reg / "schemas/registry-index.schema.json"))).validate(json.loads(ops.index_text(reg)))
@@ -625,7 +692,8 @@ def test_scaffold_produces_structurally_valid_candidate(reg):
     ops.scaffold(reg, "research", "new-thing")
     from zskill.validate import validate
     issues = [i for i in validate(reg) if "new-thing" in i.where]
-    assert not any(i.code in ("manifest-parse", "manifest-schema", "layout-name", "layout-domain", "maturity-location") for i in issues), issues
+    assert not any(i.code in ("manifest-parse", "manifest-schema", "layout-name", "layout-domain", "maturity-location",
+                              "stage-missing", "skillmd-mismatch", "file-not-allowed") for i in issues), issues
 
 
 def test_cli(reg, monkeypatch):
@@ -636,3 +704,175 @@ def test_cli(reg, monkeypatch):
     assert main(["index", "--check"]) == 0
     (reg / WR / "SKILL.md").write_text("broken")
     assert main(["validate"]) == 1
+
+
+# ------------------------------------------------ normalization: origin / ids ---
+@pytest.mark.parametrize("bad", ["authored", "imported", "discovered", "synthetic", "made-up"])
+def test_only_native_evolved_upstream_seed_are_origin_values(reg, bad):
+    edit_manifest(reg, WR, lambda m: m["metadata"]["origin"].update(type=bad))
+    assert "manifest-schema" in codes(reg)
+
+
+@pytest.mark.parametrize("good", ["native", "upstream-seed"])
+def test_common_origin_values_accepted(reg, good):
+    def f(m):
+        m["metadata"]["origin"].update(type=good)
+        if good == "upstream-seed":
+            m["provenance"]["sourceRefs"] = [{"kind": "repository", "uri": "https://example.com/x", "ref": "v1"}]
+    edit_manifest(reg, WR, f)
+    assert "manifest-schema" not in codes(reg)
+
+
+def test_discovered_marker_is_registry_local_and_needs_upstream_seed(reg):
+    edit_manifest(reg, WR, lambda m: m["spec"].update(markers={"provenance": "discovered"}))
+    assert "marker-discovered" in codes(reg)
+
+
+def test_evolution_kind_has_a_single_location(reg):
+    edit_manifest(reg, WR, lambda m: m["provenance"].update(evolution={"kind": "refined"}))
+    assert "manifest-schema" in codes(reg)          # provenance.evolution is not a location
+    import shutil
+    shutil.copy(REPO / WR / "manifest.yaml", reg / WR / "manifest.yaml")      # undo the invalid edit
+
+    def ok(m):
+        m["metadata"]["origin"] = {"type": "evolved", "evolution": {"kind": "refined", "sourceRefs": []}}
+        m["spec"].pop("markers")                                               # 'discovered' marker only pairs with upstream-seed
+    edit_manifest(reg, CAND, ok)
+    assert "manifest-schema" not in codes(reg)
+
+
+def test_shared_id_grammar_dotted_hyphenated_no_zsk_prefix(reg):
+    ops.scaffold(reg, "research", "research.web-fact-check")
+    issues = [i for i in Registry(reg).run() if "research.web-fact-check" in i.where]
+    assert not any(i.code in ("manifest-schema", "layout-name", "skillmd-mismatch") for i in issues), issues
+    md = (reg / "candidates/research/research.web-fact-check/SKILL.md").read_text()
+    assert "name: research-web-fact-check" in md          # portable Agent Skills name
+    with pytest.raises(SystemExit):
+        ops.scaffold(reg, "research", "zsk.thing")
+    edit_manifest(reg, WR, lambda m: m["metadata"].update(id="Web_Research"))
+    assert "manifest-schema" in codes(reg)
+
+
+def test_legacy_prefix_rejected_in_manifest(reg):
+    ops.scaffold(reg, "research", "thing")
+    edit_manifest(reg, "candidates/research/thing", lambda m: m["metadata"].update(id="zsk.thing"))
+    assert "id-prefix" in codes(reg)
+
+
+# -------------------------------------------------- normalization: bundle contents ---
+@pytest.mark.parametrize("rel", ["examples/x.bin", "examples/run.py", "evals/setup.sh", "notes.txt", "examples/a b.md",
+                                 "examples/.hidden", "examples/a/b/c/d/e.md", "extra/file.md", "provenance/deep/er/x.yaml"])
+def test_allow_list_rejects_unlisted_paths(reg, rel):
+    p = reg / WR / rel
+    p.parent.mkdir(parents=True, exist_ok=True)
+    p.write_text("x")
+    assert "file-not-allowed" in codes(reg)
+
+
+@pytest.mark.parametrize("rel", ["examples/more.md", "examples/data.json", "evals/fixtures/doc.txt", "provenance/notes.md",
+                                 "provenance/eval-reports/1.0.0.yaml", "CHANGELOG.md"])
+def test_allow_list_accepts_listed_paths(reg, rel):
+    p = reg / WR / rel
+    p.parent.mkdir(parents=True, exist_ok=True)
+    p.write_text("x: 1\n")
+    assert "file-not-allowed" not in codes(reg)
+
+
+def test_symlinks_rejected_and_never_followed(reg):
+    d0 = next(b for b in Registry(reg).bundles if b.rel == WR).digest()
+    (reg / WR / "examples/link.md").symlink_to("/etc/hostname")
+    (reg / WR / "examples/dirlink").symlink_to("/etc")
+    assert "symlink" in codes(reg)
+    assert next(b for b in Registry(reg).bundles if b.rel == WR).digest() == d0   # target bytes never hashed
+
+
+def test_size_limits(reg):
+    (reg / WR / "examples/big.md").write_text("x" * (300 * 1024))
+    assert "file-too-large" in codes(reg)
+    (reg / WR / "examples/big.md").unlink()
+    for i in range(9):
+        (reg / WR / f"examples/chunk{i}.md").write_text("y" * (250 * 1024))
+    assert "bundle-too-large" in codes(reg)
+
+
+def test_file_count_limit(reg):
+    for i in range(205):
+        (reg / WR / f"examples/f{i}.md").write_text("z")
+    assert "bundle-too-many-files" in codes(reg)
+
+
+def test_non_utf8_rejected(reg):
+    (reg / WR / "examples/latin.md").write_bytes(b"caf\xe9")
+    assert "file-not-text" in codes(reg)
+
+
+def test_transcript_content_detected(reg):
+    (reg / WR / "examples/chat.md").write_text("\n".join(f"{r}: text {i}" for i in range(4) for r in ("user", "assistant")))
+    assert "runtime-artifact-content" in codes(reg)
+
+
+def test_json_lines_event_stream_detected(reg):
+    (reg / WR / "examples/events.json").write_text("\n".join('{"step": %d, "tool": "fetch"}' % i for i in range(8)))
+    assert "runtime-artifact-content" in codes(reg)
+
+
+def test_role_json_detected(reg):
+    (reg / WR / "examples/msgs.json").write_text('[{"role": "user"}, {"role": "assistant"}, {"role": "tool"}]')
+    assert "runtime-artifact-content" in codes(reg)
+
+
+def test_normal_prose_is_not_flagged(reg):
+    (reg / WR / "examples/prose.md").write_text("The user asked a question. The assistant answered.\nAssistant behaviour is described above.\n")
+    assert "runtime-artifact-content" not in codes(reg)
+
+
+# ------------------------------------------- normalization: locks and ordering ---
+def _foreign_ref_reg(reg):
+    edit_manifest(reg, WR, lambda m: (m["metadata"].update(version="1.1.0"), m["references"].append(
+        {"registry": "tiny-agents", "id": "research.web-fact-check", "version": "^1.2.0", "digest": None})))
+    ap = load(reg, WR + "/provenance/approval.yaml")
+    ap["exception"]["expiresOnVersion"] = "1.2.0"
+    save(reg, WR + "/provenance/approval.yaml", ap)
+    rebind(reg, WR)
+
+
+def test_foreign_references_are_explicit_in_locks(reg):
+    _foreign_ref_reg(reg)
+    assert not [i for i in Registry(reg).run() if i.level == "error"]
+    lock = ops.resolve(reg, "competitive-intelligence")
+    assert lock["unresolved"] == [{"registry": "tiny-agents", "id": "research.web-fact-check", "version": "^1.2.0",
+                                   "digest": None, "reason": "foreign-registry-not-resolved-offline", "requestedBy": "web-research"}]
+    assert all(r["registry"] == "skills" and r["directorySeal"].startswith("sha256:") for r in lock["resolved"])
+    from jsonschema import Draft202012Validator
+    Draft202012Validator(json.load(open(reg / "schemas/resolution-lock.schema.json"))).validate(lock)
+
+
+def test_lock_has_empty_unresolved_when_all_local(reg):
+    lock = ops.resolve(reg, "competitive-intelligence")
+    assert lock["unresolved"] == []
+
+
+def test_explicit_code_point_comparator():
+    from zskill.bundle import cp_key
+    ids = ["b", "a.b", "a-b", "a", "a2", "A"]
+    assert sorted(ids, key=cp_key) == ["A", "a", "a-b", "a.b", "a2", "b"]      # '-' (0x2d) < '.' (0x2e) < '2' (0x32)
+    assert sorted(["\uff5e", "\U00010000"], key=cp_key) == ["\uff5e", "\U00010000"]   # code-point, unlike UTF-16 order
+
+
+def test_index_order_is_semver_then_maturity(reg):
+    import shutil
+    shutil.copytree(reg / WR, reg / "candidates/research/web-research")
+    (reg / "candidates/research/web-research/provenance/stage.yaml").write_text("stage: drafted\n")
+    edit_manifest(reg, "candidates/research/web-research", lambda m: (
+        m["metadata"].update(maturity="candidate", version="1.10.0"), m["security"].update(approvals=[])))
+    ents = [(e["id"], e["version"], e["maturity"]) for e in ops.index(reg)["entries"] if e["id"] == "web-research"]
+    assert ents == [("web-research", "1.0.0", "canonical"), ("web-research", "1.10.0", "candidate")]   # numeric, not lexical
+
+
+def test_two_index_builds_are_byte_identical_via_cli(reg, monkeypatch):
+    monkeypatch.chdir(reg)
+    from zskill.cli import main
+    assert main(["index"]) == 0
+    a = (reg / "registry/index.json").read_bytes()
+    assert main(["index"]) == 0
+    assert (reg / "registry/index.json").read_bytes() == a and main(["index", "--check"]) == 0

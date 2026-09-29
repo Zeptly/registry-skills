@@ -4,7 +4,7 @@ metadata:
   id: source-evaluation
   version: 1.0.0
   registry: skills
-  origin: {type: authored}
+  origin: {type: native}
   maturity: canonical
   lifecycle: active
 spec:
@@ -45,6 +45,6 @@ security:
   classification: low
   capabilities: []
   approvals:
-  - {type: governance, ref: 'bundle:provenance/approval.yaml', subjectDigest: 'sha256:1266041bd2c45bf9ce775090975115f7bd1ed07e3a6db93e9995588b76f911e3',
+  - {type: governance, ref: 'bundle:provenance/approval.yaml', subjectDigest: 'sha256:0b91fdc5949e1e3047e2eb2b749032e860b3f31f5047afdac26d76a344fb8889',
     issuedAt: '2026-09-29'}
 attestations: []

@@ -32,7 +32,7 @@ jobs:
           zskill ledger-check --base "origin/${{ github.base_ref }}"
       - name: Tooling tests
         run: pytest -q
-      - name: Summarise unevaluated skills
+      - name: Surface temporary protocol exceptions
         if: always()
         run: |
-          zskill validate 2>&1 | grep 'evidence-unevaluated' | sed 's/^/::notice::/' || true
+          zskill validate 2>&1 | grep 'protocol-exception\]' | sed 's/^/::warning::/' || true

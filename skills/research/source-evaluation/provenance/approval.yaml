@@ -1,10 +1,10 @@
 apiVersion: registry.zeptly.dev/v1alpha1
 kind: Approval
-subject: {registry: skills, id: source-evaluation, version: 1.0.0, digest: 'sha256:1266041bd2c45bf9ce775090975115f7bd1ed07e3a6db93e9995588b76f911e3'}
+subject: {registry: skills, id: source-evaluation, version: 1.0.0, digest: 'sha256:0b91fdc5949e1e3047e2eb2b749032e860b3f31f5047afdac26d76a344fb8889'}
 approvedBy: ['@Zeptly/registry-maintainers']
 approvedAt: '2026-09-29'
-basis: waiver
-waiver: {reason: Registry bootstrap seed skill; suite is structurally validated but has not yet been executed by
-    an eval harness., expiresOnVersion: 1.1.0}
+basis: protocol-exception
+exception: {rule: promotion.required-evaluations, reason: Registry bootstrap seed skill; suite is structurally validated
+    but has not yet been executed by an eval harness., expiresOnVersion: 1.1.0}
 notes: Seed content authored with the registry baseline. Maintainers must ratify this record or replace it with
   an eval-report approval.

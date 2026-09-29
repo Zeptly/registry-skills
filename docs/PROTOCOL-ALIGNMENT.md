@@ -40,3 +40,22 @@ Scope: this file states what the Skills registry implements from the protocol an
 ## Not implemented (deferred by the protocol or out of scope)
 
 Evidence Protocol schema/ownership, capability/gateway/model namespaces, signing, peer-index distribution, workspace overrides, traffic channels, nested QB execution, runtime-trigger contract versioning, Tiny adaptation contracts, runtime tape handling.
+
+## Final normalization pass (shared vocabulary and digest alignment)
+
+Applied after the cross-registry audit. The shared canonicalization text itself was not supplied to this registry; the choices below (RFC 8785 JCS, LF policy, seal + digest composition) are **assumptions pinned by golden vectors** (`tests/test_digest_vectors.py`) so any mismatch with the shared definition is detectable.
+
+| Item | Now |
+|---|---|
+| `origin.type` | `native` (was `authored`), `upstream-seed` (was `imported`), `evolved`. `discovered` -> `spec.markers.provenance`, `synthetic` -> `spec.markers.namespace`; neither is a common origin value. |
+| Evolution kind | Only `metadata.origin.evolution.kind`; `provenance.evolution` is rejected by schema. |
+| ID grammar | Shared: `^[a-z0-9]+([.-][a-z0-9]+)*$`, no `zsk.` prefix (`id-prefix`). SKILL.md `name` = id with dots as hyphens. |
+| Artifact digest | JCS of `{directorySeal, manifest projection}`; includes identity, spec, references, provenance, classification, capabilities; excludes version, maturity, lifecycle, attestations, approvals. |
+| Directory seal | Separate value over canonical payload files; recorded in the ledger, index and locks. |
+| Line endings | CRLF and lone CR -> LF for payload files. |
+| Candidate stage | Moved out of `spec` to `provenance/stage.yaml` so `spec` is wholly inside the digest. |
+| Resolution lock | Schema added; foreign references listed under `unresolved` with reason `foreign-registry-not-resolved-offline`. |
+| Index ordering | Explicit code-point comparator on id, SemVer precedence, then maturity, then digest; no locale-dependent sorting. |
+| Bundle contents | Explicit filename allow-list, symlinks rejected and never followed, size/count limits, transcript/tape/trace detection by name and content. |
+| Seed waivers | **Decision: temporary protocol exception**, explicit `basis: protocol-exception`, rule id, expiry 1.1.0 (unchanged), CI warning + index `unevaluated`; reason text unchanged. Not silently retained: see LIFECYCLE.md. |
+| Ledger | Ledger entries regenerated at 1.0.0 (digest algorithm changed; nothing was ever published from `main`). Not permitted once anything is on `main`. |

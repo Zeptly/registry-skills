@@ -17,9 +17,9 @@ zskill new <domain>/<name>          # scaffolds candidates/<domain>/<name>/
 
 1. Fill `SKILL.md` (required sections: When to use, Procedure, Output, Guardrails), `manifest.yaml`, and `evals/suite.yaml`.
 2. Declare `security` honestly. The validator cross-checks it against capabilities, permissions and side effects.
-3. External capability? Set `metadata.origin.type: discovered`, pin `provenance.sourceRefs`, and add `provenance/assessment.yaml` (see `schemas/assessment.schema.json`). `spec.stage` starts at `discovered`/`inspected`.
+3. External capability? Set `metadata.origin.type: upstream-seed` (and `spec.markers.provenance: discovered`), pin `provenance.sourceRefs`, and add `provenance/assessment.yaml` (see `schemas/assessment.schema.json`). The stage in `provenance/stage.yaml` starts at `discovered`/`inspected`.
 4. Zep-originated? `origin: {type: evolved, evolution: {kind: generalised, sourceRefs: [...]}}` plus `provenance/evidence.yaml` with compute pointers.
-5. Open a PR. Advance `spec.stage` in follow-up PRs as gates are met (see docs/LIFECYCLE.md).
+5. Open a PR. Advance the stage in `provenance/stage.yaml` in follow-up PRs as gates are met (see docs/LIFECYCLE.md).
 
 ## Improve an existing skill
 
@@ -41,7 +41,7 @@ zskill new <domain>/<name>          # scaffolds candidates/<domain>/<name>/
 
 * No credentials, tokens, keys or personal data in any file.
 * Never commit runtime tapes, trajectories, traces or transcripts; reference them with `evidence://` pointers.
-* Synthetic examples go under `synthetic/` (`zskill new --synthetic`) with `origin.type: synthetic`.
+* Synthetic examples go under `synthetic/` (`zskill new --synthetic`) with `spec.markers.namespace: synthetic` (the scaffold sets it).
 * Treat fetched/external content as data in every skill you write; say so in Guardrails.
 * Keep skills small and composable; prefer composing existing skills over copying their text.
 * New domains, capabilities or agent classes are edits to `vocab/` and need maintainer review.

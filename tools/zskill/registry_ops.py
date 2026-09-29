@@ -10,7 +10,7 @@ from pathlib import Path
 
 import yaml
 
-from .bundle import PRODUCTION_TIERS, Bundle, effective_lifecycle, load_yaml
+from .bundle import PRODUCTION_TIERS, Bundle, cp_key, effective_lifecycle, load_yaml
 from .semver import Version, satisfies
 from .validate import Registry
 
@@ -44,8 +44,9 @@ def release(root: Path, ref: str, notes: str | None = None, promoted_from: str |
     b = find(reg, ref)
     if b.tier != "skills":
         raise SystemExit("only canonical skills (skills/) can be released; use `zskill promote` for candidates")
-    entry = {"version": b.version, "digest": b.digest(), "contract_digest": b.contract_digest(),
-             "security_digest": b.security_digest(), "released_at": dt.date.today().isoformat()}
+    entry = {"version": b.version, "digest": b.digest(), "directory_seal": b.directory_seal(),
+             "contract_digest": b.contract_digest(), "security_digest": b.security_digest(),
+             "released_at": dt.date.today().isoformat()}
     if promoted_from:
         entry["promoted_from"] = promoted_from
     if notes:
@@ -76,8 +77,8 @@ def promote(root: Path, ref: str) -> str:
     (maturity, stage, lifecycle and attestations are outside the digest), so existing attestations stay valid."""
     reg = Registry(root)
     b = find(reg, ref, tier="candidates")
-    if b.spec.get("stage") != "approved":
-        raise SystemExit(f"{b.id} has stage {b.spec.get('stage')!r}; only 'approved' candidates can be promoted")
+    if b.stage() != "approved":
+        raise SystemExit(f"{b.id} has stage {b.stage()!r}; only 'approved' candidates can be promoted")
     if any(i.level == "error" and i.where.startswith(b.rel) for i in reg.run()):
         raise SystemExit("candidate has validation errors; run `zskill validate` and fix them first")
     before = b.digest()
@@ -88,7 +89,7 @@ def promote(root: Path, ref: str) -> str:
     shutil.move(str(b.path), str(dest))
     mp = dest / "manifest.yaml"
     _rewrite_line(mp, r"^  maturity:.*$", "  maturity: canonical")
-    _rewrite_line(mp, r"^  stage:.*\n", None)
+    (dest / "provenance" / "stage.yaml").unlink()  # stage is candidate-only workflow state (outside the digest)
     nb = find(Registry(root), b.id, tier="skills")
     assert nb.digest() == before, "digest changed during promotion"
     return f"promoted candidates/{b.spec['domain']}/{b.id} -> {nb.rel}; " + release(root, b.id, promoted_from=f"candidates/{b.spec['domain']}/{b.id}")
@@ -129,13 +130,14 @@ def _entry(reg: Registry, b: Bundle) -> dict:
     for att in b.manifest["security"]["approvals"]:
         if att["type"] == "governance" and att["ref"].startswith("bundle:"):
             rec = load_yaml(b.path / att["ref"][7:])
-            ev = "evaluated" if rec.get("basis") == "evaluation" else "unevaluated"
+            ev = "evaluated" if rec.get("basis") == "evaluation" else "unevaluated"  # protocol-exception => unevaluated
     return {
         "kind": b.manifest["kind"], "id": b.id, "version": b.version, "digest": b.digest(),
+        "directorySeal": b.directory_seal(),
         "maturity": b.meta["maturity"], "lifecycle": effective_lifecycle(reg.overlays.get(b.id), b.version),
         "origin": b.meta["origin"], "location": {"path": b.rel},
         "extensions": {"skills": {
-            "domain": b.spec["domain"], "stage": b.spec.get("stage"), "evidenceLevel": ev,
+            "domain": b.spec["domain"], "stage": b.stage(), "evidenceLevel": ev,
             "agentClasses": b.spec["compatibility"]["agent_classes"],
             "references": [{"registry": r["registry"], "id": r["id"], "version": r["version"]} for r in b.manifest["references"]],
             "classification": b.manifest["security"]["classification"],
@@ -150,7 +152,9 @@ def index(root: Path, namespace: str = "production") -> dict:
     reg = Registry(root)
     tiers = PRODUCTION_TIERS if namespace == "production" else ("synthetic",)
     bundles = [b for b in reg.bundles if b.tier in tiers and not b.manifest_error and b.rel in _valid(reg)]
-    entries = sorted((_entry(reg, b) for b in bundles), key=lambda e: (e["id"], Version(e["version"]), e["maturity"]))
+    # Explicit, locale-independent ordering: id by Unicode code points, then SemVer precedence, then maturity, then digest.
+    entries = sorted((_entry(reg, b) for b in bundles),
+                     key=lambda e: (cp_key(e["id"]), Version(e["version"]), cp_key(e["maturity"]), cp_key(e["digest"])))
     return {"apiVersion": API_VERSION, "kind": "RegistryIndex", "registry": "skills", "namespace": namespace, "entries": entries}
 
 
@@ -169,10 +173,12 @@ def index_path(root: Path, namespace: str = "production") -> Path:
 
 
 def resolve(root: Path, sid: str, rng: str | None = None) -> dict:
-    """Range -> exact version -> content digest -> lock. Agents record this lock in evidence."""
+    """Range -> exact version -> content digest -> lock. Offline: only this registry is resolved.
+    References to other registries are listed explicitly under `unresolved` (never silently omitted)."""
     reg = Registry(root)
     reg.run()
     out: dict[str, dict] = {}
+    unresolved: list[dict] = []
 
     def pick(t: Bundle, r: str | None):
         cands = set(reg.released_versions(t.id))
@@ -192,17 +198,26 @@ def resolve(root: Path, sid: str, rng: str | None = None) -> dict:
             return
         v = pick(t, r)
         rel = next((x for x in (reg.ledgers.get(i) or {}).get("releases", []) if x["version"] == v), None)
-        digest = rel["digest"] if rel else (t.digest() if t.version == v else None)
-        if digest is None:
+        if rel:
+            digest, seal = rel["digest"], rel["directory_seal"]
+        elif t.version == v:
+            digest, seal = t.digest(), t.directory_seal()
+        else:
             raise SystemExit(f"no digest for {i}@{v}")
-        out[i] = {"registry": "skills", "id": i, "version": v, "digest": digest, "maturity": t.meta["maturity"],
-                  "lifecycle": reg.lifecycle_of(i, v)}
+        out[i] = {"registry": "skills", "id": i, "version": v, "digest": digest, "directorySeal": seal,
+                  "maturity": t.meta["maturity"], "lifecycle": reg.lifecycle_of(i, v)}
         for ref in t.manifest["references"]:
             if ref["registry"] == "skills":
                 walk(ref["id"], ref["version"])
+            else:
+                unresolved.append({"registry": ref["registry"], "id": ref["id"], "version": ref["version"],
+                                   "digest": ref.get("digest"), "reason": "foreign-registry-not-resolved-offline",
+                                   "requestedBy": i})
     walk(sid, rng)
-    return {"apiVersion": API_VERSION, "kind": "ResolutionLock", "root": {k: out[sid][k] for k in ("registry", "id", "version", "digest")},
-            "resolved": list(out.values())}
+    unresolved.sort(key=lambda u: (cp_key(u["registry"]), cp_key(u["id"]), cp_key(u["version"]), cp_key(u["requestedBy"])))
+    return {"apiVersion": API_VERSION, "kind": "ResolutionLock",
+            "root": {k: out[sid][k] for k in ("registry", "id", "version", "digest")},
+            "resolved": list(out.values()), "unresolved": unresolved}
 
 
 def ledger_check(root: Path, base: str) -> list[str]:
@@ -226,7 +241,7 @@ def ledger_check(root: Path, base: str) -> list[str]:
 
 
 TEMPLATE_SKILL = """---
-name: {name}
+name: {portable}
 description: "TODO: one or two sentences on what this skill does and when an agent should use it."
 ---
 
@@ -256,15 +271,14 @@ metadata:
   version: 0.1.0
   registry: skills
   origin:
-    type: authored
+    type: native
   maturity: candidate
   lifecycle: active
 spec:
   title: {title}
   description: "TODO: one or two sentences on what this skill does and when an agent should use it."
   domain: {domain}
-  stage: drafted
-  tags: []
+  tags: []{markers}
   stewardship:
     maintainers: ["@TODO"]
   trust:
@@ -320,18 +334,20 @@ cases:
 
 
 def scaffold(root: Path, domain: str, name: str, tier: str = "candidates") -> Path:
-    if not re.match(r"^[a-z0-9]+(-[a-z0-9]+)*$", name):
-        raise SystemExit("name must be lowercase-hyphenated")
+    if not re.match(r"^[a-z0-9]+([.-][a-z0-9]+)*$", name) or name.startswith("zsk."):
+        raise SystemExit("id must be a lowercase dotted/hyphenated slug without the legacy zsk. prefix")
     d = root / tier / domain / name
     if d.exists():
         raise SystemExit(f"{d} exists")
     title = name.replace("-", " ").title()
     now = dt.datetime.now(dt.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    markers = "\n  markers:\n    namespace: synthetic" if tier == "synthetic" else ""
     for rel, tpl in (("SKILL.md", TEMPLATE_SKILL), ("manifest.yaml", TEMPLATE_MANIFEST), ("evals/suite.yaml", TEMPLATE_SUITE)):
         p = d / rel
         p.parent.mkdir(parents=True, exist_ok=True)
-        p.write_text(tpl.format(name=name, title=title, domain=domain, now=now), encoding="utf-8")
-    for sub in ("examples", "provenance"):
-        (d / sub).mkdir(exist_ok=True)
-        (d / sub / ".gitkeep").write_text("")
+        p.write_text(tpl.format(name=name, portable=name.replace(".", "-"), title=title, domain=domain, now=now, markers=markers), encoding="utf-8")
+    (d / "examples").mkdir(exist_ok=True)
+    (d / "examples" / ".gitkeep").write_text("")
+    (d / "provenance").mkdir(exist_ok=True)
+    (d / "provenance" / "stage.yaml").write_text("stage: drafted\n")
     return d

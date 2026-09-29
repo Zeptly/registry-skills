@@ -3,7 +3,8 @@ registry: skills
 skill: source-evaluation
 releases:
 - version: 1.0.0
-  digest: sha256:1266041bd2c45bf9ce775090975115f7bd1ed07e3a6db93e9995588b76f911e3
+  digest: sha256:0b91fdc5949e1e3047e2eb2b749032e860b3f31f5047afdac26d76a344fb8889
+  directory_seal: sha256:dff32fb3e7d2cf276b79cd6955ae5a578d1d5303af5d21595855ad6100fcf8ba
   contract_digest: sha256:cfd8b6a32c7d1ccb2d432df5a2bd23127d0c76d55cbb02f659f86b36d840da01
   security_digest: sha256:6ebd71eb7c4cfa0abfa68298feac03f725a148a0bedbdca90ada7b140a6e84dd
   released_at: '2026-09-29'

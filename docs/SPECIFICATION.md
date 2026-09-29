@@ -22,10 +22,10 @@ Tiers: `skills/` (maturity `canonical`), `candidates/` (maturity `candidate`), `
 apiVersion: registry.zeptly.dev/v1alpha1
 kind: SkillBlueprint
 metadata:
-  id: web-research            # unique within the skills registry; = directory = SKILL.md name
+  id: web-research            # shared grammar: lowercase dotted/hyphenated slug, no `zsk.` prefix; = directory name
   version: 1.0.0              # SemVer
   registry: skills
-  origin: {type: authored}    # authored | evolved | discovered | imported | synthetic  (+ evolution for evolved)
+  origin: {type: native}      # native | evolved | upstream-seed  (evolved carries origin.evolution.{kind, sourceRefs})
   maturity: canonical         # candidate | canonical
   lifecycle: active           # active | deprecated | revoked  (mirror of the lifecycle overlay)
 spec: {...}                   # skills-specific, §3
@@ -35,6 +35,8 @@ security: {classification, capabilities, approvals}
 attestations: []              # digest-bound
 ```
 
+* **Common `origin.type` values are exactly `native`, `evolved`, `upstream-seed`.** `discovered` (`spec.markers.provenance`) and `synthetic` (`spec.markers.namespace`) are registry-local markers, never origin values. The evolution kind lives only at `metadata.origin.evolution.kind`.
+* `id` follows the shared grammar `^[a-z0-9]+([.-][a-z0-9]+)*$` (<= 96 chars); the legacy `zsk.` prefix is rejected. The `SKILL.md` frontmatter `name` is the id with dots replaced by hyphens (Agent Skills names are hyphen-only).
 * `maturity`, `origin` and `lifecycle` are **independent**. Location must agree with maturity (validator), but nothing derives one from another.
 * `origin.evolution` (`{kind, sourceRefs}`) is required for, and only valid with, `origin.type: evolved`. `sourceRefs` are structured references to the artifacts evolved from. `provenance.sourceRefs` are external sources (`{kind, uri, ref?, digest?, retrievedAt?, license?}`), pinned before approval.
 * `references` use `{registry, id, version, digest}`. `version` is exact or a range; `digest` is `null` unless pinned and MAY only accompany an exact version. References to registries other than `skills` are validated structurally only; this repository never fetches other repositories.
@@ -43,7 +45,7 @@ attestations: []              # digest-bound
 
 ## 3. `spec` (skills-specific semantics, unchanged in meaning)
 
-`title`, `description`, `domain`, `tags`, `stewardship` (maintainers, licence), `trust` (`tier`, `assessment`), `compatibility` (`protocol`, `agent_classes`, `min_context_tokens`, `supersedes`), `requires` (capabilities, tools), `composition` (per-reference `role`/`optional`), `inputs`, `outputs`, `security_profile` (data sensitivity, side effects, permissions, external systems, network egress, authentication, destructive operations, HITL), `evaluation` (`suite`, `min_pass_rate`), and `stage` (candidates only: `discovered|inspected|drafted|evaluating|approved`), `x` extension namespace.
+`title`, `description`, `domain`, `tags`, `stewardship` (maintainers, licence), `trust` (`tier`, `assessment`), `compatibility` (`protocol`, `agent_classes`, `min_context_tokens`, `supersedes`), `requires` (capabilities, tools), `composition` (per-reference `role`/`optional`), `inputs`, `outputs`, `security_profile` (data sensitivity, side effects, permissions, external systems, network egress, authentication, destructive operations, HITL), `evaluation` (`suite`, `min_pass_rate`), `markers` (registry-local: `namespace: synthetic`, `provenance: discovered`), `x` extension namespace. Candidate workflow stage (`discovered|inspected|drafted|evaluating|approved`) is **not** in `spec`: it lives in `provenance/stage.yaml` so that `spec` can be wholly inside the digest.
 
 Skills-registry specifics preserved: procedural `SKILL.md`, composition, skill evaluation suites, provenance/approvals, release tagging.
 
@@ -62,9 +64,15 @@ A candidate for an existing identity MUST have a version greater than every cano
 
 ## 6. Immutability, digests, release
 
-`digest = sha256( "<relpath>\0<sha256(content)>\n" ... )` over bundle files sorted by path, excluding `provenance/**` and `CHANGELOG.md`. `manifest.yaml` is hashed as canonical JSON with these governance paths removed: `metadata.maturity`, `metadata.lifecycle`, `spec.stage`, `attestations`, `security.approvals`. Consequently promotion, lifecycle changes, and issuing attestations never change a version's digest (and attestations cannot be circular), while any change to procedure, contract, origin, provenance, evals or examples does.
+**Canonical JSON.** RFC 8785 (JCS): UTF-8; object keys sorted by UTF-16 code units; no insignificant whitespace; minimal string escaping; numbers in ES6 form. Only integers within +/-2^53 and plain-decimal floats (1e-6 <= |v| < 1e16) are accepted; NaN/Infinity/non-string keys are errors.
 
-`registry/releases/<id>.yaml` is the append-only ledger (`version`, `digest`, `contract_digest`, `security_digest`). Canonical artifacts MUST have a ledger entry whose digests match; otherwise `release-mutated`/`release-missing`. Git tags `skill/<id>/v<version>` mark released versions.
+**Line endings.** For payload files, CRLF and lone CR become LF before hashing. No BOM handling, no trimming, no re-encoding.
+
+**Directory seal** (separate value). `seal = sha256( "<relpath>\0<sha256(normalized bytes)>\n" ... )` over canonical payload files sorted by code-point order of the posix relative path. Payload = every bundle file except `manifest.yaml`, `provenance/**`, `CHANGELOG.md` and `.gitkeep`. Symlinks are never followed or hashed (they are rejected).
+
+**Artifact digest.** `digest = sha256( JCS({"directorySeal": <seal>, "manifest": <projection>}) )` where the projection is an explicit include-list: `apiVersion`, `kind`, `metadata.{id, registry, origin}`, `spec`, `references`, `provenance`, `security.{classification, capabilities}`. **Excluded**: `metadata.version`, `metadata.maturity`, `metadata.lifecycle`, `attestations`, `security.approvals`. Consequently promotion, lifecycle changes, version bumps of identical content and issuing attestations never change the digest, while any change to identity, spec, references, provenance, classification, capabilities or payload does. Digest, seal, `contract_digest` and `security_digest` are recorded per release in `registry/releases/<id>.yaml` (append-only); canonical artifacts MUST match all four (`release-mutated`). Golden vectors: `tests/test_digest_vectors.py`.
+
+Git tags `skill/<id>/v<version>` mark released versions.
 
 ## 7. Lifecycle overlay
 
@@ -72,11 +80,13 @@ A candidate for an existing identity MUST have a version greater than every cano
 
 ## 8. Synthetic namespace
 
-Synthetic examples live only under `synthetic/`, MUST have `origin.type: synthetic`, MUST NOT reuse a production id, MUST NOT be referenced by production artifacts, and appear only in `registry/index.synthetic.json`, never `registry/index.json`.
+Synthetic examples live only under `synthetic/`, MUST carry `spec.markers.namespace: synthetic` (required in, and only valid under, `synthetic/`; `synthetic` is not an origin value), MUST NOT reuse a production id, MUST NOT be referenced by production artifacts, and appear only in `registry/index.synthetic.json`, never `registry/index.json`.
 
-## 9. What never gets committed
+## 9. Bundle contents (allow-list) and what never gets committed
 
-Runtime tapes, trajectories, traces, transcripts and other sensitive execution payloads stay outside registry Git. The validator rejects such files by name/extension, files over 256 KiB, and evidence pointers that are not `evidence://` or `https://` URIs (no `file:`/`data:`); evidence summaries are capped at 500 characters; secrets are scanned in every text file.
+Allowed files (names match `[A-Za-z0-9][A-Za-z0-9._-]*`, depth <= 4, UTF-8 text): top level `SKILL.md`, `manifest.yaml`, `CHANGELOG.md`; `evals/**` and `examples/**` with extensions `.md .yaml .yml .json .txt .csv`; `provenance/{approval,assessment,evidence,stage}.yaml`, `provenance/*.md|*.txt`, `provenance/eval-reports/*.yaml`; `.gitkeep`. Everything else is `file-not-allowed`. Symlinks are rejected. Limits: 256 KiB per file, 2 MiB and 200 files per bundle.
+
+Runtime tapes, trajectories, traces, transcripts and other sensitive execution payloads stay outside registry Git. Detection: file names/suffixes (`.tape .trace .jsonl .ndjson .har .pcap .sqlite .db .parquet .pkl`; tape/trajectory/trace/transcript/rollout names) and content heuristics (JSON-lines event streams, chat-turn transcripts, role/message JSON). Evidence pointers must be `evidence://` or `https://` (never `file:`/`data:`), summaries are capped at 500 characters, and every text file is scanned for secrets. There is no endpoint/URL scan beyond pointer schemes.
 
 ## 10. Repository-wide invariants (`zskill validate`)
 

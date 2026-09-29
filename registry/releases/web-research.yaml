@@ -3,7 +3,8 @@ registry: skills
 skill: web-research
 releases:
 - version: 1.0.0
-  digest: sha256:ffddbe52bf5290094de4d288f1ff099afd54af468007e133e16f6fb147de255c
+  digest: sha256:a296de03bba25d62815681161183ab947d1dda1465a240dfc3f060cf9c3998a7
+  directory_seal: sha256:511732ec12caa357c289c7a5f58a13385817edaad813dcf80b7a256960c21171
   contract_digest: sha256:e64e05c54dffebeddc015e45c13a41d9c8a8c55321fb8da161f345ea7b5666ec
   security_digest: sha256:1076ba01292631e9a958cb7326119e360e5fc9f233c59b73827852f01f9b43cf
   released_at: '2026-09-29'

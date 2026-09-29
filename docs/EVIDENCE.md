@@ -31,7 +31,7 @@ Stored at `provenance/evidence.yaml` (outside the digest, so evidence accumulate
 
 ## Resolution locks
 
-`declared range -> resolver -> exact version -> content digest -> runtime lock -> evidence`. `zskill resolve <id> [--range r]` produces the `ResolutionLock` (exact version + digest for the skill and its composed skills, skipping revoked versions). Runtimes record this lock in their evidence so a run can be tied to exact content. No network access to other registries is needed or attempted.
+`declared range -> resolver -> exact version -> content digest -> runtime lock -> evidence`. `zskill resolve <id> [--range r]` produces the `ResolutionLock` (`schemas/resolution-lock.schema.json`): exact version, digest and directory seal for the skill and its composed skills (skipping revoked versions), plus an explicit `unresolved` list for references to other registries. Foreign references are never silently omitted and never fetched. Runtimes record this lock in their evidence so a run can be tied to exact content. No network access to other registries is needed or attempted.
 
 ## Attestations
 

@@ -13,7 +13,7 @@ from jsonschema import Draft202012Validator, FormatChecker
 from referencing import Registry as SchemaRegistry, Resource
 from referencing.jsonschema import DRAFT202012
 
-from .bundle import (Bundle, effective_lifecycle, load_bundles, load_yaml, sha256_hex)
+from .bundle import (Bundle, effective_lifecycle, load_bundles, load_yaml, normalize_text, sha256_hex)
 from .semver import Version, bump_level, satisfies, validate_range
 
 CLASSIFICATIONS = {"low": 0, "moderate": 1, "high": 2, "critical": 3}
@@ -25,6 +25,16 @@ MAX_DEP_DEPTH = 3
 MAX_CLOSURE = 20
 TINY_MAX_CHARS = 8000
 MAX_FILE_BYTES = 256 * 1024
+MAX_BUNDLE_BYTES = 2 * 1024 * 1024
+MAX_BUNDLE_FILES = 200
+MAX_DEPTH = 4
+STAGES = ("discovered", "inspected", "drafted", "evaluating", "approved")
+SAFE_PART = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,99}$")
+TEXT_EXT = {".md", ".yaml", ".yml", ".json", ".txt", ".csv"}
+TOP_FILES = {"SKILL.md", "manifest.yaml", "CHANGELOG.md"}
+PROVENANCE_FILES = {"approval.yaml", "assessment.yaml", "evidence.yaml", "stage.yaml"}
+TRANSCRIPT_LINE = re.compile(r"(?im)^\s*(user|assistant|system|human|ai|tool)\s*:\s")
+ROLE_JSON = re.compile(r'(?i)"role"\s*:\s*"(user|assistant|tool|system)"')
 FORBIDDEN_SUFFIXES = {".tape", ".trace", ".jsonl", ".ndjson", ".har", ".pcap", ".sqlite", ".db", ".parquet", ".pkl"}
 FORBIDDEN_NAME = re.compile(r"(?i)(^|[._-])(tapes?|trajector(y|ies)|traces?|transcripts?|rollouts?)([._-]|$)")
 
@@ -34,12 +44,12 @@ SECRET_PATTERNS = [
     ("API secret key", re.compile(r"\bsk-[A-Za-z0-9_-]{20,}")),
     ("Slack token", re.compile(r"\bxox[baprs]-[A-Za-z0-9-]{10,}")),
     ("private key block", re.compile(r"-----BEGIN [A-Z ]*PRIVATE KEY-----")),
-    ("URL with embedded credentials", re.compile(r"[a-z]+://[^/\s:@]+:[^/\s:@]{3,}@")),
+    ("URL with embedded credentials", re.compile(r"\b[a-z][a-z0-9+.-]{1,15}://[^/\s:@]{1,64}:[^/\s:@]{3,64}@")),
     ("assigned secret", re.compile(r"(?i)\b(api[_-]?key|secret|token|passwd|password)\b\s*[:=]\s*['\"]?[A-Za-z0-9/+_\-]{16,}")),
 ]
 
 SCHEMA_NAMES = ("envelope", "skill-blueprint", "evidence", "eval-suite", "eval-report", "approval",
-                "assessment", "release-ledger", "lifecycle-overlay", "registry-index")
+                "assessment", "release-ledger", "lifecycle-overlay", "registry-index", "resolution-lock")
 
 
 @dataclass(frozen=True)
@@ -236,13 +246,22 @@ class Registry:
         want = TIER_MATURITY[b.tier]
         if meta["maturity"] != want:
             self.err(w, "maturity-location", f"maturity {meta['maturity']!r} but artifact lives under {b.tier}/ (expects {want!r})")
-        if meta["maturity"] == "candidate" and "stage" not in spec:
-            self.err(w, "stage-missing", "candidate artifacts require spec.stage")
-        if meta["maturity"] == "canonical" and "stage" in spec:
-            self.err(w, "stage-canonical", "spec.stage is only valid while maturity is candidate")
+        stage = b.stage()
+        if meta["maturity"] == "candidate":
+            if stage is None:
+                self.err(w, "stage-missing", "candidate artifacts require provenance/stage.yaml with a valid stage")
+            elif stage not in STAGES:
+                self.err(w, "stage-invalid", f"stage {stage!r} not in {list(STAGES)}")
+        elif (b.path / "provenance" / "stage.yaml").exists():
+            self.err(w, "stage-canonical", "provenance/stage.yaml is only valid while maturity is candidate")
         otype = meta["origin"]["type"]
-        if (otype == "synthetic") != (b.tier == "synthetic"):
-            self.err(w, "synthetic-marking", "origin.type 'synthetic' is required in, and only valid under, synthetic/")
+        if meta["id"].startswith("zsk."):
+            self.err(w, "id-prefix", "ids must not carry the legacy zsk. prefix; registry: skills disambiguates")
+        markers = spec.get("markers", {})
+        if (markers.get("namespace") == "synthetic") != (b.tier == "synthetic"):
+            self.err(w, "synthetic-marking", "spec.markers.namespace: synthetic is required in, and only valid under, synthetic/")
+        if markers.get("provenance") == "discovered" and otype != "upstream-seed":
+            self.err(w, "marker-discovered", "markers.provenance 'discovered' is only valid with origin.type upstream-seed")
         if (otype == "evolved") != ("evolution" in meta["origin"]):
             self.err(w, "origin-evolution", "origin.evolution is required for (and only valid with) origin.type 'evolved'")
         eff = self.lifecycle_of(meta["id"], meta["version"])
@@ -262,8 +281,11 @@ class Registry:
         if fm is None:
             self.err(w, "skillmd-frontmatter", "SKILL.md missing or lacks valid YAML frontmatter (--- ... ---)")
             return
-        if fm.get("name") != b.id:
-            self.err(w, "skillmd-mismatch", "frontmatter name must equal metadata.id")
+        portable = b.id.replace(".", "-")  # Agent Skills names are lowercase-hyphen only
+        if fm.get("name") != portable:
+            self.err(w, "skillmd-mismatch", f"frontmatter name must equal metadata.id with dots as hyphens ({portable!r})")
+        if len(portable) > 64:
+            self.warn(w, "skillmd-name-length", "portable SKILL.md name exceeds 64 characters (Agent Skills limit)")
         if fm.get("description") != spec["description"]:
             self.err(w, "skillmd-mismatch", "frontmatter description must equal spec.description")
         extra = set(fm) - {"name", "description", "license", "compatibility", "metadata", "allowed-tools"}
@@ -368,20 +390,21 @@ class Registry:
         w, m, meta, spec = b.rel, b.manifest, b.meta, b.spec
         trust, otype = spec["trust"], meta["origin"]["type"]
         sources = m["provenance"]["sourceRefs"]
-        promoted = b.tier == "skills" or spec.get("stage") == "approved"
+        stage = b.stage()
+        promoted = b.tier == "skills" or stage == "approved"
         if trust["tier"] == "unreviewed" and promoted:
             self.err(w, "prov-unreviewed", "trust tier 'unreviewed' cannot be approved or canonical")
         for r in meta["origin"].get("evolution", {}).get("sourceRefs", []):
             if r["registry"] == "skills" and r["id"] == b.id and r["version"] == b.version:
                 self.err(w, "origin-self", "evolution sourceRefs may not reference the artifact itself")
-        if otype in ("discovered", "imported"):
+        if otype == "upstream-seed":
             if not sources:
                 self.err(w, "prov-sources", f"origin {otype} requires provenance.sourceRefs")
             if trust["tier"] == "first-party":
                 self.err(w, "prov-tier", f"origin {otype} cannot have trust tier first-party")
             rel = trust.get("assessment")
             if not rel:
-                if spec.get("stage") != "discovered":
+                if stage != "discovered":
                     self.err(w, "prov-assessment", "external artifacts beyond stage 'discovered' require spec.trust.assessment")
             else:
                 ap = b.path / rel
@@ -390,8 +413,8 @@ class Registry:
                 else:
                     data = load_yaml(ap)
                     if self.schema_check("assessment", data, f"{b.rel}/{rel}", "assessment-schema"):
-                        if data["verdict"] in ("reject", "needs-more-inspection") and (promoted or spec.get("stage") in ("drafted", "evaluating")):
-                            self.err(w, "prov-verdict", f"assessment verdict {data['verdict']!r} blocks stage {spec.get('stage', 'canonical')!r}")
+                        if data["verdict"] in ("reject", "needs-more-inspection") and (promoted or stage in ("drafted", "evaluating")):
+                            self.err(w, "prov-verdict", f"assessment verdict {data['verdict']!r} blocks stage {stage or 'canonical'!r}")
                         if data["verdict"] == "proceed-with-restrictions" and not data.get("restrictions"):
                             self.err(w, "prov-restrictions", "verdict proceed-with-restrictions requires restrictions")
             for s in sources:
@@ -429,28 +452,67 @@ class Registry:
                     self.err(w, "eval-fixture", f"case {c['id']}: fixture evals/{f} not found")
 
     def check_files(self, b: Bundle):
-        """No runtime tapes / sensitive execution payloads, no oversize blobs, no secrets."""
-        for p in b.files():
-            rel = p.relative_to(b.path).as_posix()
+        """Explicit filename allow-list, no symlinks, size limits, no runtime tapes/traces/transcripts, no secrets."""
+        for link in b.symlinks():
+            self.err(f"{b.rel}/{link.relative_to(b.path).as_posix()}", "symlink", "symlinks are not allowed in bundles (never followed, never hashed)")
+        files = b.files()
+        if len(files) > MAX_BUNDLE_FILES:
+            self.err(b.rel, "bundle-too-many-files", f"{len(files)} files exceeds {MAX_BUNDLE_FILES}")
+        if sum(p.stat().st_size for p in files) > MAX_BUNDLE_BYTES:
+            self.err(b.rel, "bundle-too-large", f"bundle exceeds {MAX_BUNDLE_BYTES} bytes in total")
+        for p in files:
+            parts = p.relative_to(b.path).parts
+            rel = "/".join(parts)
             where = f"{b.rel}/{rel}"
             if p.suffix.lower() in FORBIDDEN_SUFFIXES or FORBIDDEN_NAME.search(p.name):
                 self.err(where, "no-runtime-artifacts",
                          "runtime tapes, trajectories, traces and transcripts stay outside registry Git; reference them via evidence:// pointers")
                 continue
+            if not self._allowed(parts):
+                self.err(where, "file-not-allowed", "path/name is not on the bundle allow-list (docs/SPECIFICATION.md section 9)")
+                continue
             if p.stat().st_size > MAX_FILE_BYTES:
                 self.err(where, "file-too-large", f"{p.stat().st_size} bytes exceeds {MAX_FILE_BYTES}; registry Git holds procedures, not payloads")
-                continue
-            if p.suffix.lower() in (".png", ".jpg", ".jpeg", ".gif", ".pdf", ".zip"):
                 continue
             try:
                 text = p.read_text(encoding="utf-8")
             except UnicodeDecodeError:
-                self.warn(where, "secret-binary", "non-text file cannot be scanned for secrets")
+                self.err(where, "file-not-text", "allow-listed files must be UTF-8 text")
                 continue
+            lines = [ln for ln in text.splitlines() if ln.strip()]
+            jl = 0
+            for ln in lines:
+                if ln.lstrip().startswith("{") and ln.rstrip().endswith("}"):
+                    try:
+                        if isinstance(__import__("json").loads(ln), dict):
+                            jl += 1
+                    except ValueError:
+                        pass
+            if (len(lines) >= 5 and jl / len(lines) >= 0.8) or len(TRANSCRIPT_LINE.findall(text)) >= 6 or len(ROLE_JSON.findall(text)) >= 3:
+                self.err(where, "runtime-artifact-content", "content looks like a runtime tape/trace/transcript (JSON-lines events or chat turns); keep it out of Git")
             for name, rx in SECRET_PATTERNS:
                 mt = rx.search(text)
                 if mt and "EXAMPLE" not in mt.group(0).upper() and "<" not in mt.group(0):
                     self.err(f"{where}:{text[:mt.start()].count(chr(10)) + 1}", "secret", f"possible {name}; skills must never contain credentials")
+
+    @staticmethod
+    def _allowed(parts: tuple) -> bool:
+        if len(parts) > MAX_DEPTH or not all(SAFE_PART.match(x) or x == ".gitkeep" for x in parts):
+            return False
+        name = parts[-1]
+        ext = "." + name.rsplit(".", 1)[-1].lower() if "." in name else ""
+        if len(parts) == 1:
+            return name in TOP_FILES
+        if name == ".gitkeep":
+            return parts[0] in ("evals", "examples", "provenance")
+        top = parts[0]
+        if top in ("evals", "examples"):
+            return ext in TEXT_EXT
+        if top == "provenance":
+            if len(parts) == 2:
+                return name in PROVENANCE_FILES or ext in (".md", ".txt")
+            return len(parts) == 3 and parts[1] == "eval-reports" and ext in (".yaml", ".yml")
+        return False
 
     def _load_evidence(self, b: Bundle):
         p = b.path / "provenance" / "evidence.yaml"
@@ -499,7 +561,7 @@ class Registry:
             rec = self._att_target(b, att, f"{w}#attestation[{i}]")
             if rec is not None:
                 records[att["ref"]] = rec
-        promoted = b.tier == "skills" or b.spec.get("stage") == "approved"
+        promoted = b.tier == "skills" or b.stage() == "approved"
         if not promoted:
             return
         gov = [a for a in m["security"]["approvals"] if a["type"] == "governance"]
@@ -521,6 +583,8 @@ class Registry:
         if b.manifest["security"]["classification"] in ("high", "critical") and not a.get("securityReviewedBy"):
             self.err(aw, "approval-security", "high/critical skills require securityReviewedBy")
         if a["basis"] == "evaluation":
+            if "exception" in a:
+                self.err(aw, "approval-basis", "basis evaluation must not carry an exception block")
             ref = a.get("evaluationRef")
             ev_att = next((x for x in m["attestations"] if x["type"] == "evaluation" and x["ref"] == ref), None)
             if not ref or ev_att is None:
@@ -530,14 +594,15 @@ class Registry:
             if r is not None:
                 self.check_eval_report(b, r, ref[7:] if ref.startswith("bundle:") else ref)
         else:
-            wv = a.get("waiver")
-            if not wv:
-                self.err(aw, "approval-waiver", "basis waiver requires a waiver block")
+            ex = a.get("exception")
+            if not ex:
+                self.err(aw, "approval-exception", "basis protocol-exception requires an exception block")
                 return
-            if Version(b.version) >= Version(wv["expiresOnVersion"]):
-                self.err(aw, "waiver-expired", f"waiver expired at {wv['expiresOnVersion']}; executed evaluations required")
+            if Version(b.version) >= Version(ex["expiresOnVersion"]):
+                self.err(aw, "exception-expired", f"protocol exception expired at {ex['expiresOnVersion']}; executed evaluations required")
             else:
-                self.warn(aw, "evidence-unevaluated", f"{b.id}@{b.version} is approved by WAIVER (no executed evaluations): {wv['reason']}")
+                self.warn(aw, "protocol-exception",
+                          f"{b.id}@{b.version} is canonical under a TEMPORARY PROTOCOL EXCEPTION ({ex['rule']}, expires at {ex['expiresOnVersion']}); no executed evaluations: {ex['reason']}")
 
     def check_eval_report(self, b: Bundle, r: dict, rel: str):
         rw = f"{b.rel}/{rel}"
@@ -546,7 +611,7 @@ class Registry:
         sub = r["subject"]
         if (sub["id"], sub["version"], sub["digest"]) != (b.id, b.version, b.digest()):
             self.err(rw, "report-digest", "evaluation report is not bound to this exact artifact digest")
-        suite = (b.path / b.spec["evaluation"]["suite"]).read_bytes().replace(b"\r\n", b"\n")
+        suite = normalize_text((b.path / b.spec["evaluation"]["suite"]).read_bytes())
         if r["suiteDigest"] != "sha256:" + sha256_hex(suite):
             self.err(rw, "report-suite", "suiteDigest does not match current evals/suite.yaml")
         s = r["summary"]
@@ -561,7 +626,8 @@ class Registry:
         if rel is None:
             self.err(w, "release-missing", f"version {b.version} has no ledger entry; run `zskill release {b.id}`")
         else:
-            for key, cur in (("digest", b.digest()), ("contract_digest", b.contract_digest()), ("security_digest", b.security_digest())):
+            for key, cur in (("digest", b.digest()), ("directory_seal", b.directory_seal()),
+                             ("contract_digest", b.contract_digest()), ("security_digest", b.security_digest())):
                 if rel[key] != cur:
                     self.err(w, "release-mutated",
                              f"released version {b.version} content changed ({key} mismatch). Released versions are immutable: bump the version instead.")

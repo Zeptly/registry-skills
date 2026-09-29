@@ -39,7 +39,8 @@
           "maturity",
           "lifecycle",
           "origin",
-          "location"
+          "location",
+          "directorySeal"
         ],
         "properties": {
           "kind": {
@@ -88,6 +89,10 @@
           },
           "extensions": {
             "type": "object"
+          },
+          "directorySeal": {
+            "type": "string",
+            "pattern": "^sha256:[0-9a-f]{64}$"
           }
         }
       }

@@ -3,7 +3,8 @@ registry: skills
 skill: structured-data-extraction
 releases:
 - version: 1.0.0
-  digest: sha256:0222bc6d765b4464dd44e5faf46b99d8e2f1c0331a999e386554972ee642e64e
+  digest: sha256:77fc96d1a49c42631f1f7d6b52d8c1fdc8d84df9a6c4fc12925c7361136cf6c6
+  directory_seal: sha256:ac37023b790d6d250840e8ffc65a6cf280c2df85d51bfca144bc546755497a93
   contract_digest: sha256:703cee1751cb26f76903ea68e9ddfa1b64d8b52a0d4e9bb082c11f8d8f545098
   security_digest: sha256:ec554e8f65f1d7e880953bc40bd9691bb011accb025c49ef55133e0598e5046b
   released_at: '2026-09-29'

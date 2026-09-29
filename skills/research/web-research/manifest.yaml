@@ -4,7 +4,7 @@ metadata:
   id: web-research
   version: 1.0.0
   registry: skills
-  origin: {type: authored}
+  origin: {type: native}
   maturity: canonical
   lifecycle: active
 spec:
@@ -54,6 +54,6 @@ security:
   classification: low
   capabilities: [cap.web.search, cap.web.fetch]
   approvals:
-  - {type: governance, ref: 'bundle:provenance/approval.yaml', subjectDigest: 'sha256:ffddbe52bf5290094de4d288f1ff099afd54af468007e133e16f6fb147de255c',
+  - {type: governance, ref: 'bundle:provenance/approval.yaml', subjectDigest: 'sha256:a296de03bba25d62815681161183ab947d1dda1465a240dfc3f060cf9c3998a7',
     issuedAt: '2026-09-29'}
 attestations: []
