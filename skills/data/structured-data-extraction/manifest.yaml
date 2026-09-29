@@ -1,0 +1,41 @@
+schema: zeptly.skill/v1
+id: zsk.structured-data-extraction
+name: structured-data-extraction
+title: Structured Data Extraction
+description: Extract fields from unstructured or semi-structured documents into a schema-conforming record with per-field evidence and confidence. Use when text, PDFs or HTML must become validated structured data.
+domain: data
+version: 1.0.0
+status: active
+tags: [data, extraction, documents]
+authorship:
+  authors:
+    - {name: Zeptly, kind: organisation}
+  maintainers: ["@Zeptly/registry-maintainers"]
+provenance:
+  origin: human-authored
+  trust_tier: first-party
+compatibility:
+  protocol: 1
+  agent_classes: [execution, qb, timesaver]
+requires:
+  capabilities:
+    - {id: cap.doc.parse}
+    - {id: cap.llm.structured}
+    - {id: cap.fs.read}
+inputs:
+  - {name: document, type: file, description: Document to extract from.}
+  - {name: schema, type: object, description: JSON Schema of the target record.}
+outputs:
+  - {name: result, type: object, description: "record, per-field evidence spans, and warnings."}
+security:
+  classification: moderate
+  data_sensitivity: [confidential]
+  side_effects: none
+  permissions:
+    - {scope: "fs:workspace", access: read, reason: Read the supplied document.}
+  network: {egress: none}
+  authentication: {required: false}
+  hitl: {required: false}
+evaluation:
+  suite: evals/suite.yaml
+  min_pass_rate: 0.85

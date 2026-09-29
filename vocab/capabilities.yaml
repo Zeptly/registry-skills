@@ -1,0 +1,16 @@
+# Abstract capabilities a skill may require. Skills require *capabilities*
+# (what the agent must be able to do); they may additionally name concrete
+# tools/MCP servers. Runtimes map capabilities to whatever tools they have.
+# Naming: cap.<area>.<verb>.  Add via PR.
+capabilities:
+  cap.web.search:      {description: "Issue web search queries and read result lists."}
+  cap.web.fetch:       {description: "Fetch and read the content of a URL."}
+  cap.code.read:       {description: "Read source files / diffs."}
+  cap.code.execute:    {description: "Execute code or shell commands in a sandbox."}
+  cap.vcs.read:        {description: "Read repository, PR and issue metadata."}
+  cap.vcs.write:       {description: "Create/modify PRs, issues, comments, branches."}
+  cap.fs.read:         {description: "Read files from the agent workspace."}
+  cap.fs.write:        {description: "Write files to the agent workspace."}
+  cap.doc.parse:       {description: "Parse PDFs / office documents / HTML into text."}
+  cap.llm.structured:  {description: "Produce output conforming to a JSON schema."}
+  cap.human.confirm:   {description: "Ask a human to approve an action (HITL)."}

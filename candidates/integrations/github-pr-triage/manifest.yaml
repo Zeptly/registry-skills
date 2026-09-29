@@ -1,0 +1,57 @@
+schema: zeptly.skill/v1
+id: zsk.github-pr-triage
+name: github-pr-triage
+title: GitHub PR Triage
+description: Triage open pull requests by classifying, prioritising and proposing labels and reviewer assignments, applying changes only after human confirmation. Use when a maintainer wants a repository's PR queue sorted.
+domain: integrations
+version: 0.1.0
+status: inspected
+tags: [github, mcp, triage]
+authorship:
+  authors:
+    - {name: Zeptly registry maintainers, kind: human}
+  maintainers: ["@Zeptly/registry-maintainers"]
+provenance:
+  origin: external-discovery
+  trust_tier: unreviewed
+  sources:
+    - kind: mcp-server
+      uri: https://github.com/github/github-mcp-server
+      retrieved_at: 2026-09-29
+  assessment: provenance/assessment.yaml
+compatibility:
+  protocol: 1
+  agent_classes: [execution]
+requires:
+  capabilities:
+    - {id: cap.vcs.read}
+    - {id: cap.vcs.write}
+    - {id: cap.human.confirm}
+  tools:
+    - {kind: mcp, name: github, server: github-mcp-server}
+inputs:
+  - {name: repository, type: string, description: "owner/repo to triage."}
+outputs:
+  - {name: triage, type: markdown, description: Triage table with proposed and applied changes.}
+security:
+  classification: moderate
+  data_sensitivity: [confidential]
+  side_effects: write-external
+  permissions:
+    - {scope: "vcs:repo", access: read, reason: List pull requests and their review/CI state.}
+    - {scope: "vcs:repo", access: write, reason: "Apply confirmed labels, reviewer requests and comments."}
+  external_systems:
+    - {name: GitHub, kind: mcp}
+  network:
+    egress: allowlist
+    allowed_domains: [github.com, api.github.com]
+  authentication:
+    required: true
+    methods: [oauth, user-delegated]
+    credential_handling: runtime-injected
+  hitl:
+    required: true
+    triggers: [any label change, any reviewer request, any comment, any state change]
+evaluation:
+  suite: evals/suite.yaml
+  min_pass_rate: 0.9

@@ -1,0 +1,9 @@
+schema: zeptly.approval/v1
+skill_ref: zsk.structured-data-extraction@1.0.0
+approved_by: ["@Zeptly/registry-maintainers"]
+approved_at: 2026-09-29
+basis: waiver
+waiver:
+  reason: Registry bootstrap seed skill; suite is structurally validated but has not yet been executed by an eval harness.
+  expires_on_version: 1.1.0
+notes: Seed content authored with the registry baseline. Maintainers must ratify this record or replace it with an eval-report approval.

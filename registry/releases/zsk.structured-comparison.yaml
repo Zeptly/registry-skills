@@ -1,0 +1,8 @@
+schema: zeptly.ledger/v1
+skill: zsk.structured-comparison
+releases:
+- version: 1.0.0
+  digest: sha256:a2ff0eb3ed8de61f2ed8edba41d5df98bbb1afb202952450c69781ba9bdce06e
+  contract_digest: sha256:15fd78078be4058d7093af8078e9cb8299506cd2990a530df413fa62761e5c0e
+  security_digest: sha256:d7ddc753a340addac25ee14cc61b3012f22deacde154cf3c06ccf0147a06566b
+  released_at: '2026-09-29'

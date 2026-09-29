@@ -1,0 +1,36 @@
+name: release-tags
+
+# Tags every released skill version (skill/<id>/v<version>) once it lands on main,
+# so consumers can fetch a historical bundle without walking history.
+on:
+  push:
+    branches: [main]
+    paths: ["registry/releases/**"]
+
+permissions:
+  contents: write
+
+jobs:
+  tag:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Create missing tags
+        run: |
+          python3 - <<'PY' > tags.txt
+          import glob, yaml
+          for f in sorted(glob.glob("registry/releases/*.yaml")):
+              led = yaml.safe_load(open(f))
+              for r in led["releases"]:
+                  print(f"skill/{led['skill']}/v{r['version']}")
+          PY
+          git config user.name "registry-release-bot"
+          git config user.email "registry-release-bot@users.noreply.github.com"
+          while read -r tag; do
+            if ! git rev-parse -q --verify "refs/tags/$tag" >/dev/null; then
+              git tag -a "$tag" -m "Release ${tag#skill/}"
+              git push origin "$tag"
+            fi
+          done < tags.txt

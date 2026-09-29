@@ -1,0 +1,8 @@
+schema: zeptly.ledger/v1
+skill: zsk.source-evaluation
+releases:
+- version: 1.0.0
+  digest: sha256:ceaacd5845cfba9ef2514907b1a6d270e8fff0c22f03ea5dc567e1923db23fca
+  contract_digest: sha256:0f659f7515354ad9c0b448d513bbc06c4d83e7176b192b062d509ce713d5740a
+  security_digest: sha256:d7ddc753a340addac25ee14cc61b3012f22deacde154cf3c06ccf0147a06566b
+  released_at: '2026-09-29'

@@ -1,0 +1,23 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://registry.zeptly.dev/schemas/release-ledger/v1.json",
+  "title": "Release ledger (registry/releases/<skill-id>.yaml)",
+  "description": "Append-only record of immutable released versions. Existing entries must never change (enforced in CI against the base branch).",
+  "type": "object", "additionalProperties": false, "required": ["schema", "skill", "releases"],
+  "properties": {
+    "schema": {"const": "zeptly.ledger/v1"},
+    "skill": {"type": "string", "pattern": "^zsk\\.[a-z0-9]+(-[a-z0-9]+)*$"},
+    "releases": {"type": "array", "items": {
+      "type": "object", "additionalProperties": false,
+      "required": ["version", "digest", "contract_digest", "security_digest", "released_at"],
+      "properties": {
+        "version": {"type": "string", "pattern": "^\\d+\\.\\d+\\.\\d+(-[0-9A-Za-z.-]+)?$"},
+        "digest": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+        "contract_digest": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+        "security_digest": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+        "released_at": {"type": "string", "format": "date"},
+        "promoted_from": {"type": "string", "description": "candidates/... path or candidate ref, informational only."},
+        "notes": {"type": "string"}
+      }}}
+  }
+}

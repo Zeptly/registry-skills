@@ -1,0 +1,24 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://registry.zeptly.dev/schemas/eval-report/v1.json",
+  "title": "Eval report (provenance/eval-reports/<version>.yaml)",
+  "description": "Produced by an eval harness (outside this repo) for an exact skill version. Bound to the skill digest so it cannot be replayed against modified content.",
+  "type": "object", "additionalProperties": false,
+  "required": ["schema", "skill_ref", "skill_digest", "suite_digest", "runner", "executed_at", "summary"],
+  "properties": {
+    "schema": {"const": "zeptly.eval-report/v1"},
+    "skill_ref": {"type": "string", "pattern": "^zsk\\.[a-z0-9]+(-[a-z0-9]+)*@\\d+\\.\\d+\\.\\d+(-[0-9A-Za-z.-]+)?$"},
+    "skill_digest": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "suite_digest": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "runner": {"type": "object", "additionalProperties": false, "required": ["name", "version"],
+      "properties": {"name": {"type": "string"}, "version": {"type": "string"},
+                     "agent_class": {"type": "string"}, "model": {"type": "string"}}},
+    "executed_at": {"type": "string"},
+    "summary": {"type": "object", "additionalProperties": false, "required": ["cases", "passed", "pass_rate"],
+      "properties": {"cases": {"type": "integer", "minimum": 1}, "passed": {"type": "integer", "minimum": 0},
+                     "pass_rate": {"type": "number", "minimum": 0, "maximum": 1},
+                     "mean_cost_usd": {"type": "number"}, "mean_latency_s": {"type": "number"}}},
+    "case_results": {"type": "array", "items": {"type": "object", "required": ["id", "passed"],
+      "properties": {"id": {"type": "string"}, "passed": {"type": "boolean"}, "evidence_uri": {"type": "string"}}}}
+  }
+}

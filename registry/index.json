@@ -1,0 +1,198 @@
+{
+  "schema": "zeptly.index/v1",
+  "generated_by": "zskill index",
+  "skills": [
+    {
+      "id": "zsk.code-review",
+      "name": "code-review",
+      "domain": "engineering",
+      "path": "skills/engineering/code-review",
+      "status": "active",
+      "version": "1.0.0",
+      "digest": "sha256:3de7e3bdf293d9e0b7f5b865914b2b9b0cabf3184dd6358e4ea54cf6a2a325f7",
+      "evidence_level": "unevaluated",
+      "agent_classes": [
+        "execution",
+        "qb"
+      ],
+      "dependencies": [],
+      "security": {
+        "classification": "moderate",
+        "side_effects": "read-external",
+        "hitl_required": false
+      },
+      "released_versions": [
+        {
+          "version": "1.0.0",
+          "digest": "sha256:3de7e3bdf293d9e0b7f5b865914b2b9b0cabf3184dd6358e4ea54cf6a2a325f7"
+        }
+      ]
+    },
+    {
+      "id": "zsk.competitive-intelligence",
+      "name": "competitive-intelligence",
+      "domain": "research",
+      "path": "skills/research/competitive-intelligence",
+      "status": "active",
+      "version": "1.0.0",
+      "digest": "sha256:c7e70e1fe679771ffaf9ea105d6a81e0bff5590245ed85bb4a476288c063dae0",
+      "evidence_level": "unevaluated",
+      "agent_classes": [
+        "execution",
+        "qb"
+      ],
+      "dependencies": [
+        {
+          "id": "zsk.web-research",
+          "version": "^1.0.0"
+        },
+        {
+          "id": "zsk.source-evaluation",
+          "version": "^1.0.0"
+        },
+        {
+          "id": "zsk.structured-comparison",
+          "version": "^1.0.0"
+        }
+      ],
+      "security": {
+        "classification": "low",
+        "side_effects": "read-external",
+        "hitl_required": false
+      },
+      "released_versions": [
+        {
+          "version": "1.0.0",
+          "digest": "sha256:c7e70e1fe679771ffaf9ea105d6a81e0bff5590245ed85bb4a476288c063dae0"
+        }
+      ]
+    },
+    {
+      "id": "zsk.github-pr-triage",
+      "name": "github-pr-triage",
+      "domain": "integrations",
+      "path": "candidates/integrations/github-pr-triage",
+      "status": "inspected",
+      "version": "0.1.0",
+      "digest": "sha256:9f941ec922b5642473150132933f1ef14d128d407497838cda0163ceaf8af993",
+      "evidence_level": "n/a",
+      "agent_classes": [
+        "execution"
+      ],
+      "dependencies": [],
+      "security": {
+        "classification": "moderate",
+        "side_effects": "write-external",
+        "hitl_required": true
+      },
+      "released_versions": []
+    },
+    {
+      "id": "zsk.source-evaluation",
+      "name": "source-evaluation",
+      "domain": "research",
+      "path": "skills/research/source-evaluation",
+      "status": "active",
+      "version": "1.0.0",
+      "digest": "sha256:ceaacd5845cfba9ef2514907b1a6d270e8fff0c22f03ea5dc567e1923db23fca",
+      "evidence_level": "unevaluated",
+      "agent_classes": [
+        "execution",
+        "qb",
+        "tiny",
+        "timesaver"
+      ],
+      "dependencies": [],
+      "security": {
+        "classification": "low",
+        "side_effects": "none",
+        "hitl_required": false
+      },
+      "released_versions": [
+        {
+          "version": "1.0.0",
+          "digest": "sha256:ceaacd5845cfba9ef2514907b1a6d270e8fff0c22f03ea5dc567e1923db23fca"
+        }
+      ]
+    },
+    {
+      "id": "zsk.structured-comparison",
+      "name": "structured-comparison",
+      "domain": "analysis",
+      "path": "skills/analysis/structured-comparison",
+      "status": "active",
+      "version": "1.0.0",
+      "digest": "sha256:a2ff0eb3ed8de61f2ed8edba41d5df98bbb1afb202952450c69781ba9bdce06e",
+      "evidence_level": "unevaluated",
+      "agent_classes": [
+        "any"
+      ],
+      "dependencies": [],
+      "security": {
+        "classification": "low",
+        "side_effects": "none",
+        "hitl_required": false
+      },
+      "released_versions": [
+        {
+          "version": "1.0.0",
+          "digest": "sha256:a2ff0eb3ed8de61f2ed8edba41d5df98bbb1afb202952450c69781ba9bdce06e"
+        }
+      ]
+    },
+    {
+      "id": "zsk.structured-data-extraction",
+      "name": "structured-data-extraction",
+      "domain": "data",
+      "path": "skills/data/structured-data-extraction",
+      "status": "active",
+      "version": "1.0.0",
+      "digest": "sha256:2b07610776401e5ff9c00b0bc4c2fcab8c9e20fea14806998f8c4b063e0db004",
+      "evidence_level": "unevaluated",
+      "agent_classes": [
+        "execution",
+        "qb",
+        "timesaver"
+      ],
+      "dependencies": [],
+      "security": {
+        "classification": "moderate",
+        "side_effects": "none",
+        "hitl_required": false
+      },
+      "released_versions": [
+        {
+          "version": "1.0.0",
+          "digest": "sha256:2b07610776401e5ff9c00b0bc4c2fcab8c9e20fea14806998f8c4b063e0db004"
+        }
+      ]
+    },
+    {
+      "id": "zsk.web-research",
+      "name": "web-research",
+      "domain": "research",
+      "path": "skills/research/web-research",
+      "status": "active",
+      "version": "1.0.0",
+      "digest": "sha256:3a2d4902ada120d57dfec35bc5ed0f864e57087472e3255a6cddd76a873a6d84",
+      "evidence_level": "unevaluated",
+      "agent_classes": [
+        "execution",
+        "qb",
+        "timesaver"
+      ],
+      "dependencies": [],
+      "security": {
+        "classification": "low",
+        "side_effects": "read-external",
+        "hitl_required": false
+      },
+      "released_versions": [
+        {
+          "version": "1.0.0",
+          "digest": "sha256:3a2d4902ada120d57dfec35bc5ed0f864e57087472e3255a6cddd76a873a6d84"
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,44 @@
+schema: zeptly.skill/v1
+id: zsk.web-research
+name: web-research
+title: Web Research
+description: Answer a research question by searching the web, reading primary sources, cross-checking claims and returning a cited answer with stated confidence. Use when a question needs current or externally verifiable information.
+domain: research
+version: 1.0.0
+status: active
+tags: [research, citations, web]
+authorship:
+  authors:
+    - {name: Zeptly, kind: organisation}
+  maintainers: ["@Zeptly/registry-maintainers"]
+provenance:
+  origin: human-authored
+  trust_tier: first-party
+compatibility:
+  protocol: 1
+  agent_classes: [execution, qb, timesaver]
+  min_context_tokens: 16000
+requires:
+  capabilities:
+    - {id: cap.web.search}
+    - {id: cap.web.fetch}
+inputs:
+  - {name: question, type: string, description: The research question to answer.}
+  - {name: scope, type: string, required: false, description: "Optional constraints: time window, geography, source types."}
+outputs:
+  - {name: report, type: markdown, description: "Cited answer with evidence table, gaps and confidence."}
+  - {name: sources, type: array, description: URLs actually read and used.}
+security:
+  classification: low
+  data_sensitivity: [public]
+  side_effects: read-external
+  permissions:
+    - {scope: "web:public", access: read, reason: Search and fetch public web pages.}
+  external_systems:
+    - {name: Public web, kind: web}
+  network: {egress: open}
+  authentication: {required: false}
+  hitl: {required: false}
+evaluation:
+  suite: evals/suite.yaml
+  min_pass_rate: 0.8

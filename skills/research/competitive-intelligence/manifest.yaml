@@ -1,0 +1,47 @@
+schema: zeptly.skill/v1
+id: zsk.competitive-intelligence
+name: competitive-intelligence
+title: Competitive Intelligence
+description: Build a sourced competitive landscape for a company or product by composing web research, source evaluation and structured comparison. Use when asked who the competitors are and how they compare.
+domain: research
+version: 1.0.0
+status: active
+tags: [research, competitors, composite]
+authorship:
+  authors:
+    - {name: Zeptly, kind: organisation}
+  maintainers: ["@Zeptly/registry-maintainers"]
+provenance:
+  origin: human-authored
+  trust_tier: first-party
+compatibility:
+  protocol: 1
+  agent_classes: [execution, qb]
+  min_context_tokens: 32000
+requires:
+  capabilities:
+    - {id: cap.web.search}
+    - {id: cap.web.fetch}
+dependencies:
+  - {id: zsk.web-research, version: "^1.0.0", role: composes}
+  - {id: zsk.source-evaluation, version: "^1.0.0", role: composes}
+  - {id: zsk.structured-comparison, version: "^1.0.0", role: composes}
+inputs:
+  - {name: subject, type: string, description: Company or product to analyse.}
+  - {name: segment, type: string, required: false, description: Market segment or use case to focus on.}
+outputs:
+  - {name: landscape, type: markdown, description: "Competitor list, comparison matrix, insights and graded sources."}
+security:
+  classification: low
+  data_sensitivity: [public]
+  side_effects: read-external
+  permissions:
+    - {scope: "web:public", access: read, reason: Inherited from composed web-research.}
+  external_systems:
+    - {name: Public web, kind: web}
+  network: {egress: open}
+  authentication: {required: false}
+  hitl: {required: false}
+evaluation:
+  suite: evals/suite.yaml
+  min_pass_rate: 0.8

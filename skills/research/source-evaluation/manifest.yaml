@@ -1,0 +1,35 @@
+schema: zeptly.skill/v1
+id: zsk.source-evaluation
+name: source-evaluation
+title: Source Evaluation
+description: Assess the reliability of one or more information sources (provenance, independence, recency, bias, corroboration) and grade how far each may be relied upon. Use before citing or building conclusions on supplied or discovered sources.
+domain: research
+version: 1.0.0
+status: active
+tags: [research, credibility]
+authorship:
+  authors:
+    - {name: Zeptly, kind: organisation}
+  maintainers: ["@Zeptly/registry-maintainers"]
+provenance:
+  origin: human-authored
+  trust_tier: first-party
+compatibility:
+  protocol: 1
+  agent_classes: [execution, qb, tiny, timesaver]
+requires:
+  capabilities: []
+inputs:
+  - {name: sources, type: array, description: "Sources to evaluate (URLs, excerpts or documents) with the claim each supports."}
+outputs:
+  - {name: assessment, type: markdown, description: Per-source grades with reasons and corroboration recommendations.}
+security:
+  classification: low
+  data_sensitivity: [public]
+  side_effects: none
+  permissions: []
+  authentication: {required: false}
+  hitl: {required: false}
+evaluation:
+  suite: evals/suite.yaml
+  min_pass_rate: 0.8

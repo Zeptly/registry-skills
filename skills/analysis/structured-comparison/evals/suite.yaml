@@ -1,0 +1,15 @@
+schema: zeptly.eval-suite/v1
+skill: zsk.structured-comparison
+environment: {mode: recorded}
+cases:
+  - id: complete-data
+    description: Three vendors with complete facts.
+    inputs: {entities: ["A: $10/mo, SSO yes", "B: $12/mo, SSO yes", "C: $8/mo, SSO no"], decision_context: "Team of 20 needing SSO"}
+    expect:
+      - {type: rubric, criterion: "C is excluded or penalised for lacking SSO and the recommendation is conditional on priorities."}
+  - id: missing-data
+    description: A cell cannot be filled from supplied facts.
+    inputs: {entities: ["A: $10/mo", "B: pricing not published"], decision_context: "Budget-constrained purchase"}
+    expect:
+      - {type: rubric, criterion: "B's price is marked unknown, not guessed, and named as the key unknown."}
+      - {type: not-contains, value: "approximately $"}

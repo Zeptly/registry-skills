@@ -1,0 +1,38 @@
+schema: zeptly.skill/v1
+id: zsk.structured-comparison
+name: structured-comparison
+title: Structured Comparison
+description: Compare two or more entities (products, vendors, options) across explicit criteria and produce a normalised comparison matrix with a justified recommendation. Use when a decision needs like-for-like comparison.
+domain: analysis
+version: 1.0.0
+status: active
+tags: [analysis, comparison, decision]
+authorship:
+  authors:
+    - {name: Zeptly, kind: organisation}
+  maintainers: ["@Zeptly/registry-maintainers"]
+provenance:
+  origin: human-authored
+  trust_tier: first-party
+compatibility:
+  protocol: 1
+  agent_classes: [any]
+requires:
+  capabilities:
+    - {id: cap.llm.structured, optional: true}
+inputs:
+  - {name: entities, type: array, description: Entities to compare with the facts known about each.}
+  - {name: decision_context, type: string, description: What the comparison is for.}
+  - {name: criteria, type: array, required: false, description: Optional user-specified criteria and weights.}
+outputs:
+  - {name: comparison, type: markdown, description: "Criteria, matrix with evidence, trade-offs and conditional recommendation."}
+security:
+  classification: low
+  data_sensitivity: [public]
+  side_effects: none
+  permissions: []
+  authentication: {required: false}
+  hitl: {required: false}
+evaluation:
+  suite: evals/suite.yaml
+  min_pass_rate: 0.8
