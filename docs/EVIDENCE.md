@@ -1,6 +1,6 @@
 # Evidence References
 
-The full Evidence Protocol (ownership, schema, transport) is deferred by Registry Protocol v0.1. This registry stores only **pointers** and digest-bound attestations.
+The full Evidence Protocol (ownership, schema, transport) is deferred by Registry Protocol v0.2. This registry stores only **pointers** and digest-bound attestations.
 
 * **Crowd wisdom**: human corrections, preferences, best practice, incidents.
 * **Compute wisdom**: execution summaries, failure clusters, cost/latency, eval results.
@@ -29,13 +29,13 @@ refs:
 
 Stored at `provenance/evidence.yaml` (outside the digest, so evidence accumulates without new versions). `subject` is the structured reference `{registry, id, version, digest}`.
 
-## Resolution locks
+## Runtime locks
 
-`declared range -> resolver -> exact version -> content digest -> runtime lock -> evidence`. `zskill resolve <id> [--range r]` produces the `ResolutionLock` (`schemas/resolution-lock.schema.json`): exact version, digest and directory seal for the skill and its composed skills (skipping revoked versions), plus an explicit `unresolved` list for references to other registries. Foreign references are never silently omitted and never fetched. Runtimes record this lock in their evidence so a run can be tied to exact content. No network access to other registries is needed or attempted.
+`declared range -> resolver -> exact version -> content digest -> runtime lock -> evidence`. `zskill resolve <id>` produces the `RuntimeLock` (`schemas/runtime-lock.schema.json`, Protocol v0.2 section 6): one entry per declared reference with `status: resolved` (exact version, digest, directory seal, maturity, lifecycle, domain) or `status: unresolved` (machine-readable `code` and `message`); `complete` is true only when every entry resolved. References to other registries are `unresolved` with code `no-peer-index` unless an explicit peer index is supplied with `--peer-index`; nothing is ever fetched. Runtimes record this lock in their evidence so a run can be tied to exact content. Transitive resolution and cycle detection are runtime responsibilities.
 
 ## Attestations
 
-Manifest `attestations` (e.g. `evaluation`) and `security.approvals` (e.g. `governance`) bind `subjectDigest` to the exact artifact digest. In-bundle records (`bundle:provenance/...`) are eval reports and approvals whose own `subject.digest` must also match. A stale digest fails validation.
+Manifest `attestations` (e.g. `evaluation`) and `security.approvals` (e.g. `governance`) bind `subjectDigest` to the exact artifact digest and `subjectSeal` to the directory seal (a Skills extension; see SPECIFICATION §2), both with `digestAlgorithm`. In-bundle records (`bundle:provenance/...`) are eval reports and approvals whose own `subject.digest` and `subject.directorySeal` must also match. A stale digest fails validation.
 
 ## Cross-agent learning
 

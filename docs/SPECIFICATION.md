@@ -1,4 +1,4 @@
-# Skill Blueprint Specification (Skills registry, Zeptly Registry Protocol v0.1)
+# Skill Blueprint Specification (Skills registry, Zeptly Registry Protocol v0.2)
 
 Normative words (MUST/SHOULD/MAY) follow RFC 2119. `schemas/*.json` are authoritative for structure; `zskill validate` for cross-file rules. The common envelope is defined by the Registry Protocol; this document defines the Skills registry's `spec` and its bundle/release mechanics. See [PROTOCOL-ALIGNMENT.md](PROTOCOL-ALIGNMENT.md) for how each protocol rule is implemented and where interpretation was required.
 
@@ -10,8 +10,8 @@ Normative words (MUST/SHOULD/MAY) follow RFC 2119. `schemas/*.json` are authorit
   manifest.yaml       MUST  common envelope + skills spec
   evals/suite.yaml    MUST  (path set by spec.evaluation.suite)
   examples/           SHOULD
-  provenance/         MAY   approvals, assessments, eval reports, evidence pointers (outside the digest)
-  CHANGELOG.md        MAY   (outside the digest)
+  provenance/         MAY   approvals, assessments, eval reports, evidence pointers (outside the seal; manifest provenance is in the digest)
+  CHANGELOG.md        MAY   (payload: covered by the directory seal)
 ```
 
 Tiers: `skills/` (maturity `canonical`), `candidates/` (maturity `candidate`), `synthetic/` (isolated; see §8). The directory name MUST equal `metadata.id`; the domain directory MUST equal `spec.domain`.
@@ -25,7 +25,7 @@ metadata:
   id: web-research            # shared grammar: lowercase dotted/hyphenated slug, no `zsk.` prefix; = directory name
   version: 1.0.0              # SemVer
   registry: skills
-  origin: {type: native}      # native | evolved | upstream-seed  (evolved carries origin.evolution.{kind, sourceRefs})
+  origin: {type: native}      # native | upstream-seed | discovered | refined | evolved  (refined/evolved carry origin.evolution.{kind, sourceRefs})
   maturity: canonical         # candidate | canonical
   lifecycle: active           # active | deprecated | revoked  (mirror of the lifecycle overlay)
 spec: {...}                   # skills-specific, §3
@@ -35,17 +35,17 @@ security: {classification, capabilities, approvals}
 attestations: []              # digest-bound
 ```
 
-* **Common `origin.type` values are exactly `native`, `evolved`, `upstream-seed`.** `discovered` (`spec.markers.provenance`) and `synthetic` (`spec.markers.namespace`) are registry-local markers, never origin values. The evolution kind lives only at `metadata.origin.evolution.kind`.
-* `id` follows the shared grammar `^[a-z0-9]+([.-][a-z0-9]+)*$` (<= 96 chars); the legacy `zsk.` prefix is rejected. The `SKILL.md` frontmatter `name` is the id with dots replaced by hyphens (Agent Skills names are hyphen-only).
+* **`origin.type` values are exactly `native`, `upstream-seed`, `discovered`, `refined`, `evolved`** (v0.2). `synthetic` is not an origin value; synthetic artifacts are marked by `spec.markers.namespace: synthetic` and the reserved `example.` id prefix (§8). The former registry-local discovery marker is gone (`discovered` is now an origin type). `metadata.origin.evolution.kind` (`discovered|refined|generalised`) is the only evolution-kind location; `provenance` never carries it.
+* `id` follows the shared grammar `^[a-z0-9]+([.-][a-z0-9]+)*$` (<= 96 chars); the legacy `zsk.` prefix is rejected, and `example.` is reserved for synthetic artifacts. The `SKILL.md` frontmatter `name` is the id with dots replaced by hyphens (Agent Skills names are hyphen-only).
 * `maturity`, `origin` and `lifecycle` are **independent**. Location must agree with maturity (validator), but nothing derives one from another.
-* `origin.evolution` (`{kind, sourceRefs}`) is required for, and only valid with, `origin.type: evolved`. `sourceRefs` are structured references to the artifacts evolved from. `provenance.sourceRefs` are external sources (`{kind, uri, ref?, digest?, retrievedAt?, license?}`), pinned before approval.
-* `references` use `{registry, id, version, digest}`. `version` is exact or a range; `digest` is `null` unless pinned and MAY only accompany an exact version. References to registries other than `skills` are validated structurally only; this repository never fetches other repositories.
+* `origin.evolution` (`{kind, sourceRefs}`) is required for, and only valid with, `origin.type: refined` or `evolved`; `native` and `upstream-seed` forbid it. `upstream-seed` and `discovered` artifacts need pinned external `provenance.sourceRefs`. `sourceRefs` are structured references to the artifacts evolved from. `provenance.sourceRefs` are external sources (`{kind, uri, ref?, digest?, retrievedAt?, license?}`), pinned before approval.
+* `references` use `{registry, id, version, digest?, digestAlgorithm?}`. `version` is exact or a range; `digest` is `null` unless pinned, MAY only accompany an exact version, and then requires `digestAlgorithm: zeptly-jcs-v1`. References to registries other than `skills` are validated structurally only; locks list them as explicit `unresolved` entries unless a peer index is supplied (§6).
 * `security.classification` is a string in the envelope; the Skills registry restricts it to `low|moderate|high|critical`. `security.capabilities` MUST equal the capability ids in `spec.requires.capabilities`. Capability namespace ownership is a platform decision deferred by the protocol; ids are opaque strings validated against `vocab/capabilities.yaml`.
-* `attestations` and `security.approvals` are lists of `{type, ref, subjectDigest, issuedAt?}`. `ref` is `evidence://...` (opaque, resolved outside this repository) or `bundle:<path>` (a file inside the bundle). `subjectDigest` MUST equal the artifact's current digest; otherwise validation fails (`attestation-stale`).
+* `attestations` and `security.approvals` are lists of `{type, ref, subjectDigest, digestAlgorithm, subjectSeal, issuedAt?}`. `ref` is `evidence://...` (opaque, resolved outside this repository) or `bundle:<path>`. `subjectDigest` MUST equal the artifact's current digest. **`subjectSeal` is a Skills-registry extension** (required on every attestation/approval of a canonical or approved artifact): SKILL.md, evals and examples are payload, outside the artifact digest, so an attestation also binds the directory seal; otherwise it could survive a change to the procedure it assessed (`attestation-stale`, `attestation-seal-missing`). `evaluation` attestations additionally carry `suite: {id, version, digest}` and `result: pass|fail|inconclusive`; the suite identity is `{id: spec.evaluation.suite, version: <artifact version>, digest: sha256 of the suite file bytes}` (`eval-attestation-suite`).
 
 ## 3. `spec` (skills-specific semantics, unchanged in meaning)
 
-`title`, `description`, `domain`, `tags`, `stewardship` (maintainers, licence), `trust` (`tier`, `assessment`), `compatibility` (`protocol`, `agent_classes`, `min_context_tokens`, `supersedes`), `requires` (capabilities, tools), `composition` (per-reference `role`/`optional`), `inputs`, `outputs`, `security_profile` (data sensitivity, side effects, permissions, external systems, network egress, authentication, destructive operations, HITL), `evaluation` (`suite`, `min_pass_rate`), `markers` (registry-local: `namespace: synthetic`, `provenance: discovered`), `x` extension namespace. Candidate workflow stage (`discovered|inspected|drafted|evaluating|approved`) is **not** in `spec`: it lives in `provenance/stage.yaml` so that `spec` can be wholly inside the digest.
+`title`, `description`, `domain`, `tags`, `stewardship` (maintainers, licence), `trust` (`tier`, `assessment`), `compatibility` (`protocol`, `agent_classes`, `min_context_tokens`, `supersedes`), `requires` (capabilities, tools), `composition` (per-reference `role`/`optional`), `inputs`, `outputs`, `security_profile` (data sensitivity, side effects, permissions, external systems, network egress, authentication, destructive operations, HITL), `evaluation` (`suite`, `min_pass_rate`), `markers` (registry-local: only `namespace: synthetic`), `x` extension namespace. Candidate workflow stage (`discovered|inspected|drafted|evaluating|approved`) is **not** in `spec`: it lives in `provenance/stage.yaml` so that `spec` can be wholly inside the digest.
 
 Skills-registry specifics preserved: procedural `SKILL.md`, composition, skill evaluation suites, provenance/approvals, release tagging.
 
@@ -62,15 +62,21 @@ SemVer on the behavioural contract. **MAJOR**: any change to `security.*` or `sp
 
 A candidate for an existing identity MUST have a version greater than every canonical version of that identity (`candidate-version`).
 
-## 6. Immutability, digests, release
+## 6. Immutability, digests, release, locks (`digestAlgorithm: zeptly-jcs-v1`)
 
-**Canonical JSON.** RFC 8785 (JCS): UTF-8; object keys sorted by UTF-16 code units; no insignificant whitespace; minimal string escaping; numbers in ES6 form. Only integers within +/-2^53 and plain-decimal floats (1e-6 <= |v| < 1e16) are accepted; NaN/Infinity/non-string keys are errors.
+**Input.** Manifests and every YAML file are parsed as the v0.2 JSON-compatible YAML subset (`tools/zskill/yamlsubset.py`, built on the PyYAML scanner/parser only): string keys only; duplicate keys, anchors, aliases, merge keys, multiple documents, unsupported tags, BOMs, NULs, invalid UTF-8 and lone surrogates are rejected; integers are decimal within +/-(2^53-1); non-finite and ambiguous numeric scalars (`010`, `0x10`, `.nan`, `+1`) are rejected; `yes/no/on/off` and timestamps stay strings. Every failure carries file, key path, line/column and a machine-readable code (exit 2).
 
-**Line endings.** For payload files, CRLF and lone CR become LF before hashing. No BOM handling, no trimming, no re-encoding.
+**Canonical JSON.** RFC 8785 JCS: object keys sorted by UTF-16 code units; ECMAScript number serialization; RFC 8785 string escaping, UTF-8 output; no Unicode normalization; manifest strings are not line-ending normalized after parsing.
 
-**Directory seal** (separate value). `seal = sha256( "<relpath>\0<sha256(normalized bytes)>\n" ... )` over canonical payload files sorted by code-point order of the posix relative path. Payload = every bundle file except `manifest.yaml`, `provenance/**`, `CHANGELOG.md` and `.gitkeep`. Symlinks and unsupported entries (FIFO, socket, device) are never followed or hashed: seal and digest computation **fail** with an explicit diagnostic if the bundle contains any (the validator reports them as `symlink` / `unsupported-entry`). Hashes of valid bundles are unaffected.
+**Payload text.** Payload text files MUST be UTF-8, BOM-free, NUL-free and LF-only. CRLF and lone CR are **rejected** (`payload-line-endings`), never normalized.
 
-**Artifact digest.** `digest = sha256( JCS({"directorySeal": <seal>, "manifest": <projection>}) )` where the projection is an explicit include-list: `apiVersion`, `kind`, `metadata.{id, registry, origin}`, `spec`, `references`, `provenance`, `security.{classification, capabilities}`. **Excluded**: `metadata.version`, `metadata.maturity`, `metadata.lifecycle`, `attestations`, `security.approvals`. Consequently promotion, lifecycle changes, version bumps of identical content and issuing attestations never change the digest, while any change to identity, spec, references, provenance, classification, capabilities or payload does. Digest, seal, `contract_digest` and `security_digest` are recorded per release in `registry/releases/<id>.yaml` (append-only); canonical artifacts MUST match all four (`release-mutated`). Golden vectors: `tests/test_digest_vectors.py`.
+**Directory seal.** `seal = sha256(JCS({registry, id, version, payload: [{path, sha256}]}))`, `sha256` written `sha256:<hex>`, payload ordered by normalized POSIX path (code-point order). Payload = every bundle file except the root `manifest.yaml` and `provenance/**` (so `CHANGELOG.md`, `.gitkeep` and nested `manifest.yaml` files are payload). The seal binds `version`; the artifact digest does not. Symlinks, FIFOs, sockets, devices, unreadable entries, case-colliding paths and files outside the allow-list are rejected **before** hashing (`symlink`, `unsupported-entry`, `unreadable-entry`, `case-collision`, `file-not-allowed`).
+
+**Artifact digest.** `digest = sha256(JCS(projection))`; the projection is an explicit include-list: `apiVersion`, `kind`, `metadata.{id, registry, origin}`, `spec`, `references`, `provenance`, `security.{classification, capabilities}`. **Excluded**: `metadata.version`, `metadata.maturity`, `metadata.lifecycle`, `attestations`, `security.approvals`, lifecycle overlays. The artifact digest no longer includes the directory seal (v0.1 did). Runtime approval requirements live in `spec` and therefore affect the digest; governance approvals bind to it through `subjectDigest`. Digest, seal, `contract_digest` and `security_digest` are recorded per release in `registry/releases/<id>.yaml` (append-only, top-level `digestAlgorithm`); canonical artifacts MUST match all four (`release-mutated`).
+
+**Vectors.** `tests/vectors/zeptly-jcs-v1.skills-generated.json` (generated by `tests/vectors/make_vectors.py`, verified by the stdlib-only `tests/vectors/reference_zeptly_jcs_v1.py` and by `tests/test_vectors.py`) covers UTF-16 key order, numbers and rejections, Unicode strings, payload text rejections, parser cases, excluded fields, payload mutation, artifact digest and directory seal. **These are Skills-generated vectors: the shared protocol vector distribution was not supplied to this registry.** Contract changes require a new `digestAlgorithm` identifier and new vectors.
+
+**Locks.** `zskill resolve <id> [--domain production|synthetic] [--peer-index FILE]... [--allow-candidates]` emits a `RuntimeLock` (`schemas/runtime-lock.schema.json`) with one entry per declared reference, `complete: true` only when every entry is resolved. Resolution uses only explicit indexes (this registry's own index plus release-ledger history, plus supplied peer indexes); nothing is fetched. Unresolved codes: `no-peer-index`, `not-found`, `no-matching-version`, `revoked`, `deprecated-requires-exact-pin`, `candidate-not-allowed`, `digest-mismatch`, `invalid-range`, `domain-mismatch`. Revoked versions never resolve; deprecated versions resolve only by exact pin; candidates need opt-in; prereleases resolve only when the range names a prerelease of the same major.minor.patch; production and synthetic never mix. Transitive resolution and cycle handling are runtime responsibilities.
 
 Git tags `skill/<id>/v<version>` mark released versions.
 
@@ -80,11 +86,11 @@ Git tags `skill/<id>/v<version>` mark released versions.
 
 ## 8. Synthetic namespace
 
-Synthetic examples live only under `synthetic/`, MUST carry `spec.markers.namespace: synthetic` (required in, and only valid under, `synthetic/`; `synthetic` is not an origin value), MUST NOT reuse a production id, MUST NOT be referenced by production artifacts, and appear only in `registry/index.synthetic.json`, never `registry/index.json`.
+Synthetic examples live only under `synthetic/`, MUST carry `spec.markers.namespace: synthetic` (required in, and only valid under, `synthetic/`), MUST use ids in the reserved `example.` namespace (`zskill new --synthetic` adds the prefix; the prefix is rejected outside `synthetic/`), MUST use `evidence://example/...` pointers only (production artifacts may not), MUST NOT be referenced by production artifacts, and appear only in `registry/index.synthetic.json` (index `domain: synthetic`), never `registry/index.json`. Production locks never resolve synthetic artifacts.
 
 ## 9. Bundle contents (allow-list) and what never gets committed
 
-Allowed files (names match `[A-Za-z0-9][A-Za-z0-9._-]*`, depth <= 4, UTF-8 text): top level `SKILL.md`, `manifest.yaml`, `CHANGELOG.md`; `evals/**` and `examples/**` with extensions `.md .yaml .yml .json .txt .csv`; `provenance/{approval,assessment,evidence,stage}.yaml`, `provenance/*.md|*.txt`, `provenance/eval-reports/*.yaml`; `.gitkeep`. Everything else is `file-not-allowed`. Symlinks and unsupported filesystem entries are rejected. Limits: 256 KiB per file, 2 MiB and 200 files per bundle.
+Allowed files (names match `[A-Za-z0-9][A-Za-z0-9._-]*`, depth <= 4, UTF-8 text): top level `SKILL.md`, `manifest.yaml`, `CHANGELOG.md`; `evals/**` and `examples/**` with extensions `.md .yaml .yml .json .txt .csv`; `provenance/{approval,assessment,evidence,stage}.yaml`, `provenance/*.md|*.txt`, `provenance/eval-reports/*.yaml`; `.gitkeep`. Everything else is `file-not-allowed`. Symlinks, unsupported filesystem entries and case-colliding paths are rejected before hashing. Limits: 256 KiB per file, 2 MiB and 200 files per bundle.
 
 Runtime tapes, trajectories, traces, transcripts and other sensitive execution payloads stay outside registry Git. Detection: file names/suffixes (`.tape .trace .jsonl .ndjson .har .pcap .sqlite .db .parquet .pkl`; tape/trajectory/trace/transcript/rollout names) and content heuristics (JSON-lines event streams, chat-turn transcripts, role/message JSON). Evidence pointers must be `evidence://` or `https://` (never `file:`/`data:`), summaries are capped at 500 characters, and every text file is scanned for secrets. There is no endpoint/URL scan beyond pointer schemes.
 
@@ -94,10 +100,9 @@ Schema validity; unique identity per `(id, version)`; location/maturity/stage/or
 
 ## 11. Tooling guarantees (input handling and failure diagnostics)
 
-* **Duplicate YAML mapping keys are an error** in every YAML/JSON file the tooling reads (manifests, `SKILL.md` frontmatter, ledgers, overlays, evidence, approvals, eval suites, vocabularies, schemas). The diagnostic names the file, key, key path (for example `spec.inputs[0].name`) and line. `<<` merge overrides are not duplicates. Parsing of all other valid documents is unchanged.
-* **Unhashable bundles fail loudly.** `Bundle.directory_seal()` / `Bundle.digest()` raise `BundleError` for symlinks, unsupported filesystem entries and unreadable directories (including a symlinked bundle or domain directory); they never return a digest that silently omitted something. `zskill validate` reports the entries and skips digest-dependent checks for that bundle.
-* **Canonicalization failures are diagnostics**, not exceptions: a value outside the accepted number/key/string profile reports its path, for example `skills/x/y/manifest.yaml#$.spec.x.bad: float 1e-07 is outside the accepted magnitude range [1e-6, 1e16)` (validator code `canonicalization`).
-* **Index generation never skips.** `zskill index` fails (exit 2, per-bundle diagnostics, existing files untouched) if any bundle of the requested namespace is invalid or unhashable. Schema-valid bundles with only semantic findings are still indexed; `zskill validate` reports those.
-* **Generated outputs are schema-validated before success**: the index against `schemas/registry-index.schema.json`, resolution locks against `schemas/resolution-lock.schema.json`.
-* **Exit codes:** `0` success, `1` validation errors / stale index / append-only violation, `2` controlled failure (malformed or unreadable input, invalid bundle, unhashable content, output that fails its schema), printed as `error: ...` with no traceback.
+* **Parser rejection** (§6) applies to every YAML/JSON file the tooling reads (manifests, `SKILL.md` frontmatter, ledgers, overlays, evidence, approvals, eval suites, vocabularies, schemas, peer indexes). Diagnostics name file, key path, line/column and code.
+* **Unhashable bundles fail loudly.** `Bundle.directory_seal()` raises `BundleError` for symlinks, unsupported entries, unreadable directories, case collisions, disallowed paths and non-conforming payload text; it never returns a seal that silently omitted something. `zskill validate` reports the entries and skips seal-dependent checks for that bundle. The artifact digest is manifest-derived and independent of payload bytes.
+* **Index generation never skips.** `zskill index` fails (exit 2, per-bundle diagnostics, existing files untouched) if any bundle of the requested domain is invalid or unhashable.
+* **Generated outputs are schema-validated before success**: indexes against `schemas/registry-index.schema.json`, locks against `schemas/runtime-lock.schema.json`, peer indexes on load.
+* **Exit codes:** `0` success; `1` a valid request that cannot be satisfied (for example an unresolved reference, unknown skill, illegal promotion); `2` malformed input or validation errors (parse failures, invalid bundles, unhashable content, stale index, append-only violations, output that fails its schema). Errors print `error[<code>]: <message>` with no traceback.
 * `zskill new <domain>/<id>` rejects domains outside `vocab/domains.yaml` (which also blocks path traversal); scaffolds of both tiers validate without errors.

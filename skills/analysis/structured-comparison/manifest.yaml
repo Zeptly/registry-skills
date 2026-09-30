@@ -47,6 +47,7 @@ security:
   classification: low
   capabilities: [cap.llm.structured]
   approvals:
-  - {type: governance, ref: 'bundle:provenance/approval.yaml', subjectDigest: 'sha256:1e8111639a58ba13473647142b49306fa294efb17e8fcc611fcdad65a36f2168',
+  - {type: governance, ref: 'bundle:provenance/approval.yaml', subjectDigest: 'sha256:b1d23483900c4c5777ecb63680b140389f68a37f5dd2744d75c32f880face0e6',
+    digestAlgorithm: zeptly-jcs-v1, subjectSeal: 'sha256:f88246d49b6cc5125ac3ae87c59c6b774c22a1d6bc0ae2395666feba07381508',
     issuedAt: '2026-09-29'}
 attestations: []

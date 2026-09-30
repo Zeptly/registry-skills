@@ -10,8 +10,9 @@ import yaml
 
 from conftest import REPO, codes, edit_manifest, load, save
 from zskill import registry_ops as ops
-from zskill.bundle import (Bundle, BundleError, CanonicalizationError, RegistryError, YamlError, _StrictLoader,
-                           load_yaml, load_yaml_text, walk_bundle)
+from zskill.bundle import Bundle, walk_bundle
+from zskill.errors import BundleError, CanonicalizationError, RegistryError, YamlError
+from zskill.yamlsubset import load_yaml, load_yaml_text
 from zskill.cli import main
 from zskill.validate import Registry, validate
 
@@ -50,29 +51,38 @@ def test_duplicate_keys_detected_inside_flow_mappings_and_json():
         load_yaml_text('{"a": 1, "a": 2}', "s.json")
 
 
-def test_keys_equal_after_resolution_are_duplicates():
-    with pytest.raises(YamlError, match="duplicate"):
+def test_non_string_keys_are_rejected_before_duplicate_detection():
+    with pytest.raises(YamlError) as e:
         load_yaml_text("1: a\n1: b\n", "m.yaml")
+    assert e.value.code == "non-string-key"
 
 
-def test_merge_key_overrides_are_not_duplicates():
-    """Valid today, must stay valid: an explicit key overriding a merged one."""
-    assert load_yaml_text("base: &b {k: 1, z: 0}\nchild: {<<: *b, k: 2}\n", "m.yaml") == {
-        "base": {"k": 1, "z": 0}, "child": {"k": 2, "z": 0}}
+def test_keys_equal_as_strings_are_duplicates():
+    with pytest.raises(YamlError, match="duplicate") as e:
+        load_yaml_text('"1": a\n"1": b\n', "m.yaml")
+    assert e.value.code == "duplicate-key"
+
+
+def test_anchors_aliases_and_merge_keys_are_rejected_in_v02():
+    for text, code in [("base: &b {k: 1}\nchild: {<<: *b, k: 2}\n", "anchor"), ("a: &x 1\n", "anchor"),
+                       ("a: *x\n", "alias"), ("a: {<<: {k: 1}}\n", "merge-key")]:
+        with pytest.raises(YamlError) as e:
+            load_yaml_text(text, "m.yaml")
+        assert e.value.code == code, (text, e.value.code)
 
 
 def test_same_key_in_different_mappings_is_fine():
     assert load_yaml_text("a: {k: 1}\nb: {k: 2}\n- x\n".split("- x")[0], "m.yaml") == {"a": {"k": 1}, "b": {"k": 2}}
 
 
-def test_parsing_of_valid_documents_is_unchanged():
-    """Every YAML/JSON document in the repository parses exactly as the previous loader parsed it."""
+def test_every_repository_document_parses_under_the_v02_subset():
+    """Every YAML/JSON document in the repository is inside the JSON-compatible subset and equals PyYAML safe_load
+    wherever the two agree on semantics (the subset only ever rejects, it never re-interprets valid documents)."""
     files = [p for d in ("schemas", "vocab", "skills", "candidates", "registry") for p in (REPO / d).rglob("*")
              if p.suffix in (".yaml", ".yml", ".json")]
     assert len(files) > 40
     for p in files:
-        with open(p, encoding="utf-8") as fh:
-            assert load_yaml(p) == yaml.load(fh, Loader=_StrictLoader), p
+        assert load_yaml(p) == json.loads(json.dumps(yaml.safe_load(p.read_text(encoding="utf-8")), default=str)), p  # timestamps stay strings
 
 
 def test_empty_document_and_scalars_still_parse():
@@ -135,10 +145,12 @@ def test_seal_and_digest_refuse_unhashable_entries(reg, kind):
     before = (b0.directory_seal(), b0.digest())
     _entries(reg)[kind](reg / WR)
     b = web_research(reg)
-    for fn in (b.directory_seal, b.digest):
+    for fn in (b.directory_seal, b.seal_document):
         with pytest.raises(BundleError) as e:
             fn()
+        assert e.value.exit_code == 2
         assert WR + "/examples/" in str(e.value) and "cannot compute seal/digest" in str(e.value)
+    assert b.digest() == before[1]        # the artifact digest is manifest-only; the seal is what refuses unhashable payloads
     # the valid bundle hashes identically once the entry is gone again
     (reg / WR / "examples" / {"file-symlink": "l.md", "dir-symlink": "dl", "broken-symlink": "broken.md", "fifo": "fifo.md"}[kind]).unlink()
     b = web_research(reg)
@@ -163,7 +175,7 @@ def test_symlinked_bundle_directory_is_rejected(reg):
     found = [i for i in issues(reg) if i.code == "symlink"]
     assert found and found[0].where == WR
     with pytest.raises(BundleError, match="web-research"):
-        web_research(reg).digest()
+        web_research(reg).directory_seal()
 
 
 def test_symlinked_domain_directory_is_rejected(reg):
@@ -268,13 +280,13 @@ def test_index_cli_leaves_existing_index_untouched_on_failure(reg, monkeypatch, 
 
 def test_namespaces_fail_independently(reg):
     ops.scaffold(reg, "research", "demo-echo", tier="synthetic")
-    (reg / "synthetic/research/demo-echo/manifest.yaml").write_text("broken: true\n")
+    (reg / "synthetic/research/example.demo-echo/manifest.yaml").write_text("broken: true\n")
     assert len(ops.index(reg, "production")["entries"]) == 7          # production unaffected
     with pytest.raises(RegistryError, match="synthetic index"):
         ops.index(reg, "synthetic")
     ops.scaffold(reg, "research", "demo-2", tier="synthetic")
-    shutil.rmtree(reg / "synthetic/research/demo-echo")
-    assert [e["id"] for e in ops.index(reg, "synthetic")["entries"]] == ["demo-2"]
+    shutil.rmtree(reg / "synthetic/research/example.demo-echo")
+    assert [e["id"] for e in ops.index(reg, "synthetic")["entries"]] == ["example.demo-2"]
 
 
 def test_semantically_invalid_but_schema_valid_bundle_is_still_indexed(reg):
@@ -301,8 +313,8 @@ def test_index_is_validated_against_its_schema_before_success(reg, monkeypatch, 
 
 
 def test_resolution_lock_is_validated_before_success(reg, monkeypatch, capsys):
-    _tighten(reg, "resolution-lock.schema.json", "bogusField")
-    with pytest.raises(RegistryError, match=r"(?s)resolution-lock\.schema\.json.*bogusField"):
+    _tighten(reg, "runtime-lock.schema.json", "bogusField")
+    with pytest.raises(RegistryError, match=r"(?s)runtime-lock\.schema\.json.*bogusField"):
         ops.resolve(reg, "competitive-intelligence")
     monkeypatch.chdir(reg)
     assert main(["resolve", "competitive-intelligence"]) == 2
@@ -312,7 +324,7 @@ def test_resolution_lock_is_validated_before_success(reg, monkeypatch, capsys):
 def test_real_outputs_validate_against_the_committed_schemas():
     from jsonschema import Draft202012Validator as V
     V(json.load(open(REPO / "schemas/registry-index.schema.json"))).validate(ops.index(REPO))
-    V(json.load(open(REPO / "schemas/resolution-lock.schema.json"))).validate(ops.resolve(REPO, "competitive-intelligence"))
+    V(json.load(open(REPO / "schemas/runtime-lock.schema.json"))).validate(ops.resolve(REPO, "competitive-intelligence"))
 
 
 def test_two_index_builds_are_byte_identical_and_schema_valid(reg):
@@ -339,14 +351,15 @@ def test_synthetic_scaffold_is_isolated_end_to_end_via_cli(reg, monkeypatch):
     assert main(["validate"]) == 0 and main(["index"]) == 0
     prod = json.loads((reg / "registry/index.json").read_text())
     syn = json.loads((reg / "registry/index.synthetic.json").read_text())
-    assert "cli-demo" not in {e["id"] for e in prod["entries"]}
-    assert [e["id"] for e in syn["entries"]] == ["cli-demo"] and main(["index", "--check"]) == 0
+    assert "example.cli-demo" not in {e["id"] for e in prod["entries"]}
+    assert [e["id"] for e in syn["entries"]] == ["example.cli-demo"] and main(["index", "--check"]) == 0
 
 
 @pytest.mark.parametrize("domain", ["..", "nonexistent", "../skills", "research/../x", ""])
 def test_scaffold_rejects_unknown_and_traversing_domains(reg, domain):
-    with pytest.raises(SystemExit, match="unknown domain"):
+    with pytest.raises(RegistryError, match="unknown domain") as e:
         ops.scaffold(reg, domain, "x-thing")
+    assert e.value.exit_code == 2
     assert not (reg / "x-thing").exists()
 
 
@@ -392,29 +405,37 @@ def test_malformed_evidence_overlay_and_reports_never_crash(reg):
         (reg / t).unlink()
 
 
-@pytest.mark.parametrize("value,needle", [
-    ("1.0e-7", "float 1e-07"), (".nan", "nan"), (".inf", "inf"), ("99999999999999999999", "integer"),
-    ('"\\uD800"', "lone surrogate"), ("{1: a}", "is not a string"),
+@pytest.mark.parametrize("value,code", [
+    (".nan", "ambiguous-scalar"), (".inf", "ambiguous-scalar"), ("1.0e999", "non-finite"),
+    ("99999999999999999999", "unsafe-integer"), ('"\\uD800"', "lone-surrogate"), ("{1: a}", "non-string-key"),
+    ("010", "ambiguous-scalar"), ("0x1F", "ambiguous-scalar"),
 ])
-def test_canonicalization_failures_are_controlled_diagnostics(reg, value, needle):
+def test_unrepresentable_manifest_values_are_path_diagnostics(reg, value, code):
+    """v0.2: values that cannot be canonicalised are rejected at parse time, with file, path and code."""
     p = reg / WR / "manifest.yaml"
-    p.write_text(p.read_text().replace("  tags:", f"  x: {{bad: {value}}}\n  tags:", 1) if value != "{1: a}"
-                 else p.read_text().replace("  tags:", "  x: {bad: {1: a}}\n  tags:", 1))
-    found = issues(reg, "canonicalization")
+    p.write_text(p.read_text().replace("  tags:", f"  x: {{bad: {value}}}\n  tags:", 1))
+    found = issues(reg, "manifest-parse")
     assert found, [str(i) for i in issues(reg)]
-    assert WR + "/manifest.yaml#$.spec.x.bad" in found[0].msg and needle in found[0].msg
-    with pytest.raises(CanonicalizationError):
-        web_research(reg).digest()
+    assert f"[{code}]" in found[0].msg and "spec.x.bad" in found[0].msg and "line" in found[0].msg
+
+
+def test_one_e_minus_seven_is_a_valid_float_with_ecmascript_serialisation(reg):
+    p = reg / WR / "manifest.yaml"
+    p.write_text(p.read_text().replace("  tags:", "  x: {small: 1.0e-7, big: 1.0e21}\n  tags:", 1))
+    assert not issues(reg, "manifest-parse")
+    from zskill.bundle import canonical_json
+    assert canonical_json(web_research(reg).spec["x"]) == b'{"big":1e+21,"small":1e-7}'
 
 
 def test_canonicalization_failure_blocks_index_and_cli(reg, monkeypatch, capsys):
     p = reg / WR / "manifest.yaml"
     p.write_text(p.read_text().replace("  tags:", "  x: {bad: .nan}\n  tags:", 1))
-    with pytest.raises(RegistryError, match="canonicalization"):
+    with pytest.raises(RegistryError, match="manifest-parse|ambiguous-scalar"):
         ops.index(reg)
     monkeypatch.chdir(reg)
     assert main(["digest", "web-research"]) == 2
-    assert "manifest.yaml#$.spec.x.bad" in capsys.readouterr().err
+    err = capsys.readouterr().err
+    assert err.startswith("error[") and "spec.x.bad" in err
 
 
 def test_invalid_exception_version_is_a_diagnostic_not_a_crash(reg):
@@ -435,7 +456,7 @@ def test_non_utf8_skill_md_and_manifest_are_diagnostics(reg):
 def test_validate_json_output_survives_malformed_input(reg, monkeypatch, capsys):
     monkeypatch.chdir(reg)
     (reg / WR / "manifest.yaml").write_bytes(b"[")
-    assert main(["validate", "--json"]) == 1
+    assert main(["validate", "--json"]) == 2
     out = json.loads(capsys.readouterr().out)
     assert any(i["code"] == "manifest-parse" for i in out)
 
@@ -461,7 +482,7 @@ def test_cli_turns_unreadable_repo_into_exit_2(tmp_path, monkeypatch, capsys):
     (tmp_path / "schemas/envelope.schema.json").write_text("[")
     monkeypatch.chdir(tmp_path)
     assert main(["validate"]) == 2
-    assert capsys.readouterr().err.startswith("error:")
+    assert capsys.readouterr().err.startswith("error[")
 
 
 def test_manifest_without_identity_is_reported_not_silently_skipped(reg):

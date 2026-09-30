@@ -1,10 +1,11 @@
 schema: zeptly.ledger/v1
 registry: skills
+digestAlgorithm: zeptly-jcs-v1
 skill: web-research
 releases:
 - version: 1.0.0
-  digest: sha256:a296de03bba25d62815681161183ab947d1dda1465a240dfc3f060cf9c3998a7
-  directory_seal: sha256:511732ec12caa357c289c7a5f58a13385817edaad813dcf80b7a256960c21171
+  digest: sha256:616f76fa25791e200c52d7798f24c23a27888943286443e726b70744ae79c698
+  directory_seal: sha256:86744b44707848173ff07a5460a8053e8f635ae6468f0e2bf80b24eccea8f6dd
   contract_digest: sha256:e64e05c54dffebeddc015e45c13a41d9c8a8c55321fb8da161f345ea7b5666ec
   security_digest: sha256:1076ba01292631e9a958cb7326119e360e5fc9f233c59b73827852f01f9b43cf
-  released_at: '2026-09-29'
+  released_at: '2026-09-30'

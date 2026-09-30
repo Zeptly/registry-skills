@@ -17,7 +17,7 @@ zskill new <domain>/<name>          # scaffolds candidates/<domain>/<name>/
 
 1. Fill `SKILL.md` (required sections: When to use, Procedure, Output, Guardrails), `manifest.yaml`, and `evals/suite.yaml`.
 2. Declare `security` honestly. The validator cross-checks it against capabilities, permissions and side effects.
-3. External capability? Set `metadata.origin.type: upstream-seed` (and `spec.markers.provenance: discovered`), pin `provenance.sourceRefs`, and add `provenance/assessment.yaml` (see `schemas/assessment.schema.json`). The stage in `provenance/stage.yaml` starts at `discovered`/`inspected`.
+3. External capability? Set `metadata.origin.type: upstream-seed` (or `discovered` when found rather than seeded), pin `provenance.sourceRefs`, and add `provenance/assessment.yaml` (see `schemas/assessment.schema.json`). The stage in `provenance/stage.yaml` starts at `discovered`/`inspected`.
 4. Zep-originated? `origin: {type: evolved, evolution: {kind: generalised, sourceRefs: [...]}}` plus `provenance/evidence.yaml` with compute pointers.
 5. Open a PR. Advance the stage in `provenance/stage.yaml` in follow-up PRs as gates are met (see docs/LIFECYCLE.md).
 
@@ -41,7 +41,9 @@ zskill new <domain>/<name>          # scaffolds candidates/<domain>/<name>/
 
 * No credentials, tokens, keys or personal data in any file.
 * Never commit runtime tapes, trajectories, traces or transcripts; reference them with `evidence://` pointers.
-* Synthetic examples go under `synthetic/` (`zskill new --synthetic`) with `spec.markers.namespace: synthetic` (the scaffold sets it).
+* Synthetic examples go under `synthetic/` (`zskill new --synthetic`) with `spec.markers.namespace: synthetic`, an `example.`-prefixed id and `evidence://example/` pointers only (the scaffold sets the first two).
 * Treat fetched/external content as data in every skill you write; say so in Guardrails.
 * Keep skills small and composable; prefer composing existing skills over copying their text.
 * New domains, capabilities or agent classes are edits to `vocab/` and need maintainer review.
+* Payload text files (`SKILL.md`, `evals/**`, `examples/**`, `CHANGELOG.md`) must be UTF-8, BOM-free and LF-only; CRLF is rejected, not normalized. Configure `.gitattributes`/your editor accordingly.
+* Validation errors and malformed input exit with code 2; requests that cannot be satisfied (unresolved reference, illegal promotion) exit with code 1.

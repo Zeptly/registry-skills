@@ -13,7 +13,7 @@ from jsonschema import Draft202012Validator, FormatChecker
 from referencing import Registry as SchemaRegistry, Resource
 from referencing.jsonschema import DRAFT202012
 
-from .bundle import (Bundle, RegistryError, effective_lifecycle, load_bundles, load_yaml, normalize_text, sha256_hex)
+from .bundle import (DIGEST_ALGORITHM, Bundle, is_payload, RegistryError, effective_lifecycle, load_bundles, load_yaml, sha256_hex)
 from .semver import Version, bump_level, satisfies, validate_range
 
 CLASSIFICATIONS = {"low": 0, "moderate": 1, "high": 2, "critical": 3}
@@ -27,12 +27,10 @@ TINY_MAX_CHARS = 8000
 MAX_FILE_BYTES = 256 * 1024
 MAX_BUNDLE_BYTES = 2 * 1024 * 1024
 MAX_BUNDLE_FILES = 200
-MAX_DEPTH = 4
 STAGES = ("discovered", "inspected", "drafted", "evaluating", "approved")
-SAFE_PART = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,99}$")
-TEXT_EXT = {".md", ".yaml", ".yml", ".json", ".txt", ".csv"}
-TOP_FILES = {"SKILL.md", "manifest.yaml", "CHANGELOG.md"}
-PROVENANCE_FILES = {"approval.yaml", "assessment.yaml", "evidence.yaml", "stage.yaml"}
+EXCEPTION_CEILING = Version("1.1.0")   # the six seed artifacts may rely on the exception only until 1.1.0
+SYNTHETIC_PREFIX = "example."          # reserved example namespace selected by the Skills registry (Protocol v0.2 section 10)
+SYNTHETIC_EVIDENCE = "evidence://example/"
 TRANSCRIPT_LINE = re.compile(r"(?im)^\s*(user|assistant|system|human|ai|tool)\s*:\s")
 ROLE_JSON = re.compile(r'(?i)"role"\s*:\s*"(user|assistant|tool|system)"')
 FORBIDDEN_SUFFIXES = {".tape", ".trace", ".jsonl", ".ndjson", ".har", ".pcap", ".sqlite", ".db", ".parquet", ".pkl"}
@@ -49,7 +47,7 @@ SECRET_PATTERNS = [
 ]
 
 SCHEMA_NAMES = ("envelope", "skill-blueprint", "evidence", "eval-suite", "eval-report", "approval",
-                "assessment", "release-ledger", "lifecycle-overlay", "registry-index", "resolution-lock")
+                "assessment", "release-ledger", "lifecycle-overlay", "registry-index", "runtime-lock")
 
 
 _FAILED = object()  # sentinel: a file could not be loaded (already reported); distinct from an empty document
@@ -91,6 +89,11 @@ def load_vocab(root: Path, rel: str, key: str) -> set:
     if not isinstance(data, dict) or not isinstance(data.get(key), dict):
         raise RegistryError(f"{path}: expected a mapping with a '{key}' mapping")
     return set(data[key])
+
+
+def is_runtime_artifact_name(name: str) -> bool:
+    suffix = ("." + name.rsplit(".", 1)[-1].lower()) if "." in name else ""
+    return suffix in FORBIDDEN_SUFFIXES or bool(FORBIDDEN_NAME.search(name))
 
 
 class Registry:
@@ -284,22 +287,19 @@ class Registry:
             self.check_release(b)
 
     def check_hashable(self, b: Bundle):
-        """Symlinks, unsupported entries and non-canonicalizable values make a bundle unhashable: report them
-        explicitly and keep every digest-dependent check away from the bundle (never a silent partial digest)."""
-        bad = b.invalid_entries()
-        for rel, kind in bad:
-            where = rel
-            if kind == "symlink":
-                self.err(where, "symlink", "symlinks are not allowed in bundles (never followed, never hashed)")
-            elif kind == "unreadable":
-                self.err(where, "unreadable-entry", "entry could not be listed or read")
-            else:
-                self.err(where, "unsupported-entry", "not a regular file or directory (FIFO, socket, device, ...); not allowed in bundles")
-        if bad:
+        """Everything that forbids hashing (symlinks, special files, unreadable entries, disallowed or case-colliding
+        paths, non-LF/BOM/NUL/non-UTF-8 payload text, non-canonicalizable values) is reported explicitly, and
+        digest-dependent checks stay away from the bundle: never a silent partial digest."""
+        problems = b.hash_problems()
+        for pr in problems:
+            if pr.code == "file-not-allowed" and is_runtime_artifact_name(pr.path.rsplit("/", 1)[-1]):
+                continue  # reported once, as no-runtime-artifacts, by check_files
+            self.err(pr.path, pr.code, pr.message)
+        if problems:
             self.unhashable.add(b.rel)
             return
         try:
-            b.digest(), b.contract_digest(), b.security_digest()
+            b.digest(), b.directory_seal(), b.contract_digest(), b.security_digest()
         except RegistryError as e:
             self.err(b.rel + "/manifest.yaml", "canonicalization", str(e))
             self.unhashable.add(b.rel)
@@ -326,10 +326,14 @@ class Registry:
         markers = spec.get("markers", {})
         if (markers.get("namespace") == "synthetic") != (b.tier == "synthetic"):
             self.err(w, "synthetic-marking", "spec.markers.namespace: synthetic is required in, and only valid under, synthetic/")
-        if markers.get("provenance") == "discovered" and otype != "upstream-seed":
-            self.err(w, "marker-discovered", "markers.provenance 'discovered' is only valid with origin.type upstream-seed")
-        if (otype == "evolved") != ("evolution" in meta["origin"]):
-            self.err(w, "origin-evolution", "origin.evolution is required for (and only valid with) origin.type 'evolved'")
+        if (b.tier == "synthetic") != meta["id"].startswith(SYNTHETIC_PREFIX):
+            self.err(w, "synthetic-namespace",
+                     f"synthetic artifacts must use the reserved id prefix {SYNTHETIC_PREFIX!r}, and no other artifact may")
+        evo = meta["origin"].get("evolution")
+        if otype in ("refined", "evolved") and evo is None:
+            self.err(w, "origin-evolution", f"origin.type {otype!r} requires metadata.origin.evolution")
+        if otype in ("native", "upstream-seed") and evo is not None:
+            self.err(w, "origin-evolution", f"origin.type {otype!r} must not carry metadata.origin.evolution")
         eff = self.lifecycle_of(meta["id"], meta["version"])
         if meta["lifecycle"] != eff:
             self.err(w, "lifecycle-mirror",
@@ -463,7 +467,7 @@ class Registry:
         for r in meta["origin"].get("evolution", {}).get("sourceRefs", []):
             if r["registry"] == "skills" and r["id"] == b.id and r["version"] == b.version:
                 self.err(w, "origin-self", "evolution sourceRefs may not reference the artifact itself")
-        if otype == "upstream-seed":
+        if otype in ("upstream-seed", "discovered"):
             if not sources:
                 self.err(w, "prov-sources", f"origin {otype} requires provenance.sourceRefs")
             if trust["tier"] == "first-party":
@@ -486,7 +490,7 @@ class Registry:
             for s in sources:
                 if promoted and not s.get("ref") and not s.get("digest"):
                     self.err(w, "prov-pin", f"source {s['uri']} must be pinned (ref or digest) before approval")
-        if otype == "evolved" and meta["origin"].get("evolution", {}).get("kind") == "generalised":
+        if meta["origin"].get("evolution", {}).get("kind") == "generalised":
             ev = self._load_evidence(b)
             if not ev or not any(r["wisdom"] == "compute" for r in ev.get("refs", [])):
                 self.err(w, "prov-generalised-evidence", "generalised evolution must cite >=1 compute evidence ref in provenance/evidence.yaml")
@@ -520,6 +524,7 @@ class Registry:
     def check_files(self, b: Bundle):
         """Explicit filename allow-list, no symlinks, size limits, no runtime tapes/traces/transcripts, no secrets."""
         files = b.files()
+        not_allowed = {pr.path for pr in b.hash_problems() if pr.code == "file-not-allowed"}
         if len(files) > MAX_BUNDLE_FILES:
             self.err(b.rel, "bundle-too-many-files", f"{len(files)} files exceeds {MAX_BUNDLE_FILES}")
         if sum(p.stat().st_size for p in files) > MAX_BUNDLE_BYTES:
@@ -532,16 +537,16 @@ class Registry:
                 self.err(where, "no-runtime-artifacts",
                          "runtime tapes, trajectories, traces and transcripts stay outside registry Git; reference them via evidence:// pointers")
                 continue
-            if not self._allowed(parts):
-                self.err(where, "file-not-allowed", "path/name is not on the bundle allow-list (docs/SPECIFICATION.md section 9)")
-                continue
+            if where in not_allowed:
+                continue  # reported by check_hashable
             if p.stat().st_size > MAX_FILE_BYTES:
                 self.err(where, "file-too-large", f"{p.stat().st_size} bytes exceeds {MAX_FILE_BYTES}; registry Git holds procedures, not payloads")
                 continue
             try:
-                text = p.read_text(encoding="utf-8")
+                text = p.read_bytes().decode("utf-8")
             except UnicodeDecodeError:
-                self.err(where, "file-not-text", "allow-listed files must be UTF-8 text")
+                if not is_payload(rel):   # payload files are reported by check_hashable
+                    self.err(where, "file-not-text", "allow-listed files must be UTF-8 text")
                 continue
             lines = [ln for ln in text.splitlines() if ln.strip()]
             jl = 0
@@ -558,25 +563,6 @@ class Registry:
                 mt = rx.search(text)
                 if mt and "EXAMPLE" not in mt.group(0).upper() and "<" not in mt.group(0):
                     self.err(f"{where}:{text[:mt.start()].count(chr(10)) + 1}", "secret", f"possible {name}; skills must never contain credentials")
-
-    @staticmethod
-    def _allowed(parts: tuple) -> bool:
-        if len(parts) > MAX_DEPTH or not all(SAFE_PART.match(x) or x == ".gitkeep" for x in parts):
-            return False
-        name = parts[-1]
-        ext = "." + name.rsplit(".", 1)[-1].lower() if "." in name else ""
-        if len(parts) == 1:
-            return name in TOP_FILES
-        if name == ".gitkeep":
-            return parts[0] in ("evals", "examples", "provenance")
-        top = parts[0]
-        if top in ("evals", "examples"):
-            return ext in TEXT_EXT
-        if top == "provenance":
-            if len(parts) == 2:
-                return name in PROVENANCE_FILES or ext in (".md", ".txt")
-            return len(parts) == 3 and parts[1] == "eval-reports" and ext in (".yaml", ".yml")
-        return False
 
     def _load_evidence(self, b: Bundle):
         p = b.path / "provenance" / "evidence.yaml"
@@ -603,32 +589,59 @@ class Registry:
             if r["evidenceId"] in seen:
                 self.err(w, "evidence-dup", f"duplicate evidenceId {r['evidenceId']}")
             seen.add(r["evidenceId"])
+            self.check_evidence_domain(b, r["uri"], w, r["evidenceId"])
             if r["subject"]["id"] != b.id:
                 self.err(w, "evidence-ref-id", f"{r['evidenceId']}: subject must name this skill")
             elif r["subject"]["version"] not in known and b.tier == "skills":
                 self.warn(w, "evidence-ref-version", f"{r['evidenceId']}: version {r['subject']['version']} is not a released version")
 
+    def check_evidence_domain(self, b: Bundle, uri: str, where: str, label: str):
+        """Synthetic artifacts may only use synthetic evidence pointers; production artifacts may never use them."""
+        synthetic_uri = uri.startswith(SYNTHETIC_EVIDENCE)
+        if b.tier == "synthetic" and not synthetic_uri:
+            self.err(where, "synthetic-evidence", f"{label}: synthetic artifacts may only use {SYNTHETIC_EVIDENCE}... pointers, not {uri!r}")
+        elif b.tier != "synthetic" and synthetic_uri:
+            self.err(where, "synthetic-evidence", f"{label}: {SYNTHETIC_EVIDENCE}... pointers are reserved for synthetic artifacts")
+
     # ---- attestations, approvals, gates ---------------------------------
     def _att_target(self, b: Bundle, att: dict, where: str):
-        """Digest-bind check + in-bundle ref resolution. Returns loaded record or None."""
-        if att["subjectDigest"] != b.digest():
+        """Digest- and seal-binding check plus in-bundle ref resolution. Returns the loaded record or None.
+
+        An attestation must name the artifact digest (projection) AND the directory seal: SKILL.md, evals and
+        examples are outside the artifact digest, so binding the seal keeps an attestation from surviving a change to
+        the procedure it assessed (Skills-registry extension of the v0.2 attestation shape)."""
+        digest, seal = b.digest(), b.directory_seal()
+        if att["subjectDigest"] != digest:
             self.err(where, "attestation-stale",
-                     f"{att['type']} attestation binds {att['subjectDigest'][:19]}... but the artifact digest is {b.digest()[:19]}...; re-issue it")
+                     f"{att['type']} attestation binds digest {att['subjectDigest'][:19]}... but the artifact digest is {digest[:19]}...; re-issue it")
             return None
-        if att["ref"].startswith("bundle:"):
-            rel = att["ref"][len("bundle:"):]
-            fp = (b.path / rel).resolve()
-            if ".." in Path(rel).parts or not str(fp).startswith(str(b.path.resolve())) or not fp.is_file():
-                self.err(where, "attestation-ref", f"{att['ref']} does not resolve to a file inside the bundle")
-                return None
-            rec = self._load(fp, f"{b.rel}/{rel}", "attestation-parse")
-            if rec is _FAILED:
-                return None
-            if not isinstance(rec, dict):
-                self.err(f"{b.rel}/{rel}", "attestation-parse", "attestation record must be a mapping (document is empty or not a mapping)")
-                return None
-            return rec
-        return None  # evidence:// pointers are opaque here (Evidence Protocol deferred)
+        if att.get("subjectSeal") is None:
+            self.err(where, "attestation-seal-missing", f"{att['type']} attestation must carry subjectSeal (Skills payload is outside the artifact digest)")
+            return None
+        if att["subjectSeal"] != seal:
+            self.err(where, "attestation-stale",
+                     f"{att['type']} attestation binds seal {att['subjectSeal'][:19]}... but the directory seal is {seal[:19]}...; the payload changed; re-issue it")
+            return None
+        ref = att["ref"]
+        if ref.startswith("evidence://"):
+            self.check_evidence_domain(b, ref, where, att["type"])
+            return None  # evidence:// pointers are opaque here (Evidence Protocol deferred)
+        rel = ref[len("bundle:"):]
+        fp = (b.path / rel).resolve()
+        if ".." in Path(rel).parts or not str(fp).startswith(str(b.path.resolve())) or not fp.is_file():
+            self.err(where, "attestation-ref", f"{ref} does not resolve to a file inside the bundle")
+            return None
+        rec = self._load(fp, f"{b.rel}/{rel}", "attestation-parse")
+        if rec is _FAILED:
+            return None
+        if not isinstance(rec, dict):
+            self.err(f"{b.rel}/{rel}", "attestation-parse", "attestation record must be a mapping (document is empty or not a mapping)")
+            return None
+        return rec
+
+    def suite_digest(self, b: Bundle) -> str | None:
+        p = b.path / b.spec["evaluation"]["suite"]
+        return "sha256:" + sha256_hex(p.read_bytes()) if p.is_file() else None
 
     def check_attestations(self, b: Bundle):
         w, m = b.rel + "/manifest.yaml", b.manifest
@@ -637,6 +650,16 @@ class Registry:
             rec = self._att_target(b, att, f"{w}#attestation[{i}]")
             if rec is not None:
                 records[att["ref"]] = rec
+        # evaluation attestations: suite identity/digest must match this artifact's suite
+        suite_digest = self.suite_digest(b)
+        for i, att in enumerate(m["attestations"]):
+            if att["type"] != "evaluation":
+                continue
+            suite = att["suite"]
+            exp = (b.spec["evaluation"]["suite"], b.version, suite_digest)
+            if (suite["id"], suite["version"], suite["digest"]) != exp:
+                self.err(f"{w}#attestation[{i}]", "eval-attestation-suite",
+                         f"suite must be {{id: {exp[0]}, version: {exp[1]}, digest: {exp[2]}}} (the suite is versioned with the artifact)")
         promoted = b.tier == "skills" or b.stage() == "approved"
         if not promoted:
             return
@@ -654,10 +677,12 @@ class Registry:
         if not self.schema_check("approval", a, aw, "approval-schema"):
             return
         sub = a["subject"]
-        if (sub["registry"], sub["id"], sub["version"], sub["digest"]) != ("skills", b.id, b.version, b.digest()):
-            self.err(aw, "approval-subject", f"approval subject is not {b.id}@{b.version} at the current digest")
+        if (sub["registry"], sub["id"], sub["version"], sub["digest"], sub["directorySeal"]) != \
+                ("skills", b.id, b.version, b.digest(), b.directory_seal()):
+            self.err(aw, "approval-subject", f"approval subject is not {b.id}@{b.version} at the current digest and directory seal")
         if b.manifest["security"]["classification"] in ("high", "critical") and not a.get("securityReviewedBy"):
             self.err(aw, "approval-security", "high/critical skills require securityReviewedBy")
+        passing = [x for x in m["attestations"] if x["type"] == "evaluation" and x.get("result") == "pass"]
         if a["basis"] == "evaluation":
             if "exception" in a:
                 self.err(aw, "approval-basis", "basis evaluation must not carry an exception block")
@@ -666,6 +691,8 @@ class Registry:
             if not ref or ev_att is None:
                 self.err(aw, "approval-evaluation", "basis evaluation requires evaluationRef matching an `evaluation` attestation in attestations")
                 return
+            if ev_att["result"] != "pass":
+                self.err(aw, "eval-attestation-result", f"promotion requires a passing evaluation, not result {ev_att['result']!r}")
             r = records.get(ref)
             if r is not None:
                 self.check_eval_report(b, r, ref[7:] if ref.startswith("bundle:") else ref)
@@ -674,11 +701,17 @@ class Registry:
             if not ex:
                 self.err(aw, "approval-exception", "basis protocol-exception requires an exception block")
                 return
+            if passing:
+                self.err(aw, "exception-claims-evaluation",
+                         "a protocol exception must not be accompanied by a passing evaluation attestation: an exception is never an evaluation")
             try:
                 expires = Version(ex["expiresOnVersion"])
             except ValueError:
                 self.err(aw, "exception-version", f"expiresOnVersion {ex['expiresOnVersion']!r} is not a valid SemVer version")
                 return
+            if expires > EXCEPTION_CEILING:
+                self.err(aw, "exception-version",
+                         f"expiresOnVersion {ex['expiresOnVersion']} is later than {EXCEPTION_CEILING.text}: the transitional exception cannot be extended (Protocol v0.2 section 11)")
             if Version(b.version) >= expires:
                 self.err(aw, "exception-expired", f"protocol exception expired at {ex['expiresOnVersion']}; executed evaluations required")
             else:
@@ -690,16 +723,18 @@ class Registry:
         if not self.schema_check("eval-report", r, rw, "report-schema"):
             return
         sub = r["subject"]
-        if (sub["id"], sub["version"], sub["digest"]) != (b.id, b.version, b.digest()):
-            self.err(rw, "report-digest", "evaluation report is not bound to this exact artifact digest")
-        suite = normalize_text((b.path / b.spec["evaluation"]["suite"]).read_bytes())
-        if r["suiteDigest"] != "sha256:" + sha256_hex(suite):
-            self.err(rw, "report-suite", "suiteDigest does not match current evals/suite.yaml")
+        if (sub["id"], sub["version"], sub["digest"], sub["directorySeal"]) != (b.id, b.version, b.digest(), b.directory_seal()):
+            self.err(rw, "report-digest", "evaluation report is not bound to this exact artifact digest and directory seal")
+        if r["suiteDigest"] != self.suite_digest(b):
+            self.err(rw, "report-suite", "suiteDigest does not match the current suite file")
         s = r["summary"]
         if s["passed"] > s["cases"] or abs(s["passed"] / s["cases"] - s["passRate"]) > 0.005:
             self.err(rw, "report-consistency", "summary passRate inconsistent with passed/cases")
         if s["passRate"] < b.spec["evaluation"]["min_pass_rate"]:
             self.err(rw, "report-threshold", f"passRate {s['passRate']} < required {b.spec['evaluation']['min_pass_rate']}")
+        for c in r.get("caseResults", []):
+            if c.get("evidenceUri"):
+                self.check_evidence_domain(b, c["evidenceUri"], rw, c["id"])
 
     def check_release(self, b: Bundle):
         w = b.rel

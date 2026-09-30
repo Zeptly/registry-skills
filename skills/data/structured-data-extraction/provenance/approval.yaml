@@ -1,6 +1,7 @@
 apiVersion: registry.zeptly.dev/v1alpha1
 kind: Approval
-subject: {registry: skills, id: structured-data-extraction, version: 1.0.0, digest: 'sha256:77fc96d1a49c42631f1f7d6b52d8c1fdc8d84df9a6c4fc12925c7361136cf6c6'}
+subject: {registry: skills, id: structured-data-extraction, version: 1.0.0, digest: 'sha256:72048153599a3d9857662c9178b6f6a9f3b2a1217e416d1799c965cd7ddee082',
+  digestAlgorithm: zeptly-jcs-v1, directorySeal: 'sha256:910aa9291e0884531ae30af33f219584df64eedbc3378bf888045227d4edb468'}
 approvedBy: ['@Zeptly/registry-maintainers']
 approvedAt: '2026-09-29'
 basis: protocol-exception

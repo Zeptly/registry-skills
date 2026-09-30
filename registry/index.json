@@ -2,14 +2,16 @@
   "apiVersion": "registry.zeptly.dev/v1alpha1",
   "kind": "RegistryIndex",
   "registry": "skills",
-  "namespace": "production",
+  "digestAlgorithm": "zeptly-jcs-v1",
+  "domain": "production",
   "entries": [
     {
+      "registry": "skills",
       "kind": "SkillBlueprint",
       "id": "code-review",
       "version": "1.0.0",
-      "digest": "sha256:9fe40802586d8aac4eba65e342dcec386f56b78f40bc025f2bfd70e403d92c3e",
-      "directorySeal": "sha256:31d2c81b18d6783666448b134065c9aadb46e0ab005cbf6453f6bf24f40fcf24",
+      "digest": "sha256:b2bd1e8956318e62c23886e3c012a93345f376c2dc3445ff2552e1c2d8cd5e87",
+      "digestAlgorithm": "zeptly-jcs-v1",
       "maturity": "canonical",
       "lifecycle": "active",
       "origin": {
@@ -18,6 +20,7 @@
       "location": {
         "path": "skills/engineering/code-review"
       },
+      "domain": "production",
       "extensions": {
         "skills": {
           "domain": "engineering",
@@ -34,20 +37,24 @@
           "releasedVersions": [
             {
               "version": "1.0.0",
-              "digest": "sha256:9fe40802586d8aac4eba65e342dcec386f56b78f40bc025f2bfd70e403d92c3e",
+              "digest": "sha256:b2bd1e8956318e62c23886e3c012a93345f376c2dc3445ff2552e1c2d8cd5e87",
+              "directorySeal": "sha256:013f4b48e345bb8d2cab75ec154e6ed378a5de577a10bb938738a3f3f66948ea",
+              "digestAlgorithm": "zeptly-jcs-v1",
               "lifecycle": "active",
               "tag": "skill/code-review/v1.0.0"
             }
           ]
         }
-      }
+      },
+      "directorySeal": "sha256:013f4b48e345bb8d2cab75ec154e6ed378a5de577a10bb938738a3f3f66948ea"
     },
     {
+      "registry": "skills",
       "kind": "SkillBlueprint",
       "id": "competitive-intelligence",
       "version": "1.0.0",
-      "digest": "sha256:32e2b634e6e30675a07a7c71840937c425476b0fc0ec1cc73fe2df5af69bf66b",
-      "directorySeal": "sha256:8c6e8c16c2ea61f1615da10fd8779f4f6692c7761c3a179148c3216540401f68",
+      "digest": "sha256:48d2f447381022d72f403847fc4a15bc158e901eb2ab0c2bf8867002f8f2da3b",
+      "digestAlgorithm": "zeptly-jcs-v1",
       "maturity": "canonical",
       "lifecycle": "active",
       "origin": {
@@ -56,6 +63,7 @@
       "location": {
         "path": "skills/research/competitive-intelligence"
       },
+      "domain": "production",
       "extensions": {
         "skills": {
           "domain": "research",
@@ -88,28 +96,33 @@
           "releasedVersions": [
             {
               "version": "1.0.0",
-              "digest": "sha256:32e2b634e6e30675a07a7c71840937c425476b0fc0ec1cc73fe2df5af69bf66b",
+              "digest": "sha256:48d2f447381022d72f403847fc4a15bc158e901eb2ab0c2bf8867002f8f2da3b",
+              "directorySeal": "sha256:66309224502acc5e91b064ce769cb1d35cb7439c6d5ed49104bb73af09d734f0",
+              "digestAlgorithm": "zeptly-jcs-v1",
               "lifecycle": "active",
               "tag": "skill/competitive-intelligence/v1.0.0"
             }
           ]
         }
-      }
+      },
+      "directorySeal": "sha256:66309224502acc5e91b064ce769cb1d35cb7439c6d5ed49104bb73af09d734f0"
     },
     {
+      "registry": "skills",
       "kind": "SkillBlueprint",
       "id": "github-pr-triage",
       "version": "0.1.0",
-      "digest": "sha256:02f119a02caddee10032a1c7fa82b835a9609d3c2e9549ff116257e06976ba98",
-      "directorySeal": "sha256:288d21cddb35086b620c890894924aedc82c4621fb1b2f0072fda455f641d564",
+      "digest": "sha256:3ee1f47475b2fed12dea7c25f7968f7020d5d86d0f92cef1ee36bef7a12b5cdf",
+      "digestAlgorithm": "zeptly-jcs-v1",
       "maturity": "candidate",
       "lifecycle": "active",
       "origin": {
-        "type": "upstream-seed"
+        "type": "discovered"
       },
       "location": {
         "path": "candidates/integrations/github-pr-triage"
       },
+      "domain": "production",
       "extensions": {
         "skills": {
           "domain": "integrations",
@@ -127,11 +140,12 @@
       }
     },
     {
+      "registry": "skills",
       "kind": "SkillBlueprint",
       "id": "source-evaluation",
       "version": "1.0.0",
-      "digest": "sha256:0b91fdc5949e1e3047e2eb2b749032e860b3f31f5047afdac26d76a344fb8889",
-      "directorySeal": "sha256:dff32fb3e7d2cf276b79cd6955ae5a578d1d5303af5d21595855ad6100fcf8ba",
+      "digest": "sha256:2317f2f814bbba17b6cac12ec6ada2c8bd132c723285856bb36b25e290f45861",
+      "digestAlgorithm": "zeptly-jcs-v1",
       "maturity": "canonical",
       "lifecycle": "active",
       "origin": {
@@ -140,6 +154,7 @@
       "location": {
         "path": "skills/research/source-evaluation"
       },
+      "domain": "production",
       "extensions": {
         "skills": {
           "domain": "research",
@@ -158,20 +173,24 @@
           "releasedVersions": [
             {
               "version": "1.0.0",
-              "digest": "sha256:0b91fdc5949e1e3047e2eb2b749032e860b3f31f5047afdac26d76a344fb8889",
+              "digest": "sha256:2317f2f814bbba17b6cac12ec6ada2c8bd132c723285856bb36b25e290f45861",
+              "directorySeal": "sha256:c4ec4b34d42cf8446b61bdb53d3bb9f0c82deb32cd72bb9cfd1ae15bf846e907",
+              "digestAlgorithm": "zeptly-jcs-v1",
               "lifecycle": "active",
               "tag": "skill/source-evaluation/v1.0.0"
             }
           ]
         }
-      }
+      },
+      "directorySeal": "sha256:c4ec4b34d42cf8446b61bdb53d3bb9f0c82deb32cd72bb9cfd1ae15bf846e907"
     },
     {
+      "registry": "skills",
       "kind": "SkillBlueprint",
       "id": "structured-comparison",
       "version": "1.0.0",
-      "digest": "sha256:1e8111639a58ba13473647142b49306fa294efb17e8fcc611fcdad65a36f2168",
-      "directorySeal": "sha256:f06b8ed3ff2d7fb6040158128d2ffdf0a23ecc3744cd2e590451e1fc8db23203",
+      "digest": "sha256:b1d23483900c4c5777ecb63680b140389f68a37f5dd2744d75c32f880face0e6",
+      "digestAlgorithm": "zeptly-jcs-v1",
       "maturity": "canonical",
       "lifecycle": "active",
       "origin": {
@@ -180,6 +199,7 @@
       "location": {
         "path": "skills/analysis/structured-comparison"
       },
+      "domain": "production",
       "extensions": {
         "skills": {
           "domain": "analysis",
@@ -195,20 +215,24 @@
           "releasedVersions": [
             {
               "version": "1.0.0",
-              "digest": "sha256:1e8111639a58ba13473647142b49306fa294efb17e8fcc611fcdad65a36f2168",
+              "digest": "sha256:b1d23483900c4c5777ecb63680b140389f68a37f5dd2744d75c32f880face0e6",
+              "directorySeal": "sha256:f88246d49b6cc5125ac3ae87c59c6b774c22a1d6bc0ae2395666feba07381508",
+              "digestAlgorithm": "zeptly-jcs-v1",
               "lifecycle": "active",
               "tag": "skill/structured-comparison/v1.0.0"
             }
           ]
         }
-      }
+      },
+      "directorySeal": "sha256:f88246d49b6cc5125ac3ae87c59c6b774c22a1d6bc0ae2395666feba07381508"
     },
     {
+      "registry": "skills",
       "kind": "SkillBlueprint",
       "id": "structured-data-extraction",
       "version": "1.0.0",
-      "digest": "sha256:77fc96d1a49c42631f1f7d6b52d8c1fdc8d84df9a6c4fc12925c7361136cf6c6",
-      "directorySeal": "sha256:ac37023b790d6d250840e8ffc65a6cf280c2df85d51bfca144bc546755497a93",
+      "digest": "sha256:72048153599a3d9857662c9178b6f6a9f3b2a1217e416d1799c965cd7ddee082",
+      "digestAlgorithm": "zeptly-jcs-v1",
       "maturity": "canonical",
       "lifecycle": "active",
       "origin": {
@@ -217,6 +241,7 @@
       "location": {
         "path": "skills/data/structured-data-extraction"
       },
+      "domain": "production",
       "extensions": {
         "skills": {
           "domain": "data",
@@ -234,20 +259,24 @@
           "releasedVersions": [
             {
               "version": "1.0.0",
-              "digest": "sha256:77fc96d1a49c42631f1f7d6b52d8c1fdc8d84df9a6c4fc12925c7361136cf6c6",
+              "digest": "sha256:72048153599a3d9857662c9178b6f6a9f3b2a1217e416d1799c965cd7ddee082",
+              "directorySeal": "sha256:910aa9291e0884531ae30af33f219584df64eedbc3378bf888045227d4edb468",
+              "digestAlgorithm": "zeptly-jcs-v1",
               "lifecycle": "active",
               "tag": "skill/structured-data-extraction/v1.0.0"
             }
           ]
         }
-      }
+      },
+      "directorySeal": "sha256:910aa9291e0884531ae30af33f219584df64eedbc3378bf888045227d4edb468"
     },
     {
+      "registry": "skills",
       "kind": "SkillBlueprint",
       "id": "web-research",
       "version": "1.0.0",
-      "digest": "sha256:a296de03bba25d62815681161183ab947d1dda1465a240dfc3f060cf9c3998a7",
-      "directorySeal": "sha256:511732ec12caa357c289c7a5f58a13385817edaad813dcf80b7a256960c21171",
+      "digest": "sha256:616f76fa25791e200c52d7798f24c23a27888943286443e726b70744ae79c698",
+      "digestAlgorithm": "zeptly-jcs-v1",
       "maturity": "canonical",
       "lifecycle": "active",
       "origin": {
@@ -256,6 +285,7 @@
       "location": {
         "path": "skills/research/web-research"
       },
+      "domain": "production",
       "extensions": {
         "skills": {
           "domain": "research",
@@ -273,13 +303,16 @@
           "releasedVersions": [
             {
               "version": "1.0.0",
-              "digest": "sha256:a296de03bba25d62815681161183ab947d1dda1465a240dfc3f060cf9c3998a7",
+              "digest": "sha256:616f76fa25791e200c52d7798f24c23a27888943286443e726b70744ae79c698",
+              "directorySeal": "sha256:86744b44707848173ff07a5460a8053e8f635ae6468f0e2bf80b24eccea8f6dd",
+              "digestAlgorithm": "zeptly-jcs-v1",
               "lifecycle": "active",
               "tag": "skill/web-research/v1.0.0"
             }
           ]
         }
-      }
+      },
+      "directorySeal": "sha256:86744b44707848173ff07a5460a8053e8f635ae6468f0e2bf80b24eccea8f6dd"
     }
   ]
 }

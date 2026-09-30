@@ -1,0 +1,63 @@
+{
+  "apiVersion": "registry.zeptly.dev/v1alpha1",
+  "kind": "RegistryIndex",
+  "registry": "tiny-agents",
+  "digestAlgorithm": "zeptly-jcs-v1",
+  "domain": "production",
+  "entries": [
+    {
+      "registry": "tiny-agents",
+      "kind": "AgentBlueprint",
+      "id": "research.web-fact-check",
+      "version": "1.0.0",
+      "digest": "sha256:0000ff510000ff510000ff510000ff510000ff510000ff510000ff510000ff51",
+      "digestAlgorithm": "zeptly-jcs-v1",
+      "maturity": "canonical",
+      "lifecycle": "active",
+      "origin": {
+        "type": "native"
+      },
+      "domain": "production",
+      "location": {
+        "path": "agents/research/research.web-fact-check"
+      },
+      "directorySeal": "sha256:abababababababababababababababababababababababababababababababab"
+    },
+    {
+      "registry": "tiny-agents",
+      "kind": "AgentBlueprint",
+      "id": "research.web-fact-check",
+      "version": "1.2.0",
+      "digest": "sha256:0000ff650000ff650000ff650000ff650000ff650000ff650000ff650000ff65",
+      "digestAlgorithm": "zeptly-jcs-v1",
+      "maturity": "canonical",
+      "lifecycle": "active",
+      "origin": {
+        "type": "native"
+      },
+      "domain": "production",
+      "location": {
+        "path": "agents/research/research.web-fact-check"
+      },
+      "directorySeal": "sha256:abababababababababababababababababababababababababababababababab"
+    },
+    {
+      "registry": "tiny-agents",
+      "kind": "AgentBlueprint",
+      "id": "research.web-fact-check",
+      "version": "1.3.0",
+      "digest": "sha256:0000ff6f0000ff6f0000ff6f0000ff6f0000ff6f0000ff6f0000ff6f0000ff6f",
+      "digestAlgorithm": "zeptly-jcs-v1",
+      "maturity": "canonical",
+      "lifecycle": "active",
+      "origin": {
+        "type": "native"
+      },
+      "domain": "production",
+      "location": {
+        "path": "agents/research/research.web-fact-check"
+      },
+      "directorySeal": "sha256:abababababababababababababababababababababababababababababababab"
+    }
+  ]
+}

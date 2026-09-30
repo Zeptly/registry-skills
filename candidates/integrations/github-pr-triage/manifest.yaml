@@ -4,7 +4,7 @@ metadata:
   id: github-pr-triage
   version: 0.1.0
   registry: skills
-  origin: {type: upstream-seed}
+  origin: {type: discovered}
   maturity: candidate
   lifecycle: active
 spec:
@@ -49,7 +49,6 @@ spec:
       required: true
       triggers: [any label change, any reviewer request, any comment, any state change]
   evaluation: {suite: evals/suite.yaml, min_pass_rate: 0.9}
-  markers: {provenance: discovered}
 references: []
 provenance:
   createdAt: '2026-09-29T00:00:00Z'

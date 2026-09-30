@@ -31,3 +31,19 @@ Baseline choices were made to keep the protocol usable; these need owner input.
 | 20 | **Candidate storage** | Separate `candidates/` tier | Candidates as in-tree objects vs. a shared candidate store across registries? |
 | 21 | **Digest scope** | Governance state excluded from digest | Same rule in every registry, or must attestation-bearing fields be included? |
 | 22 | **Security review for lower classifications** | PR-level CODEOWNERS review | Explicit `securityReviewedBy` for every promotion? |
+
+## Added by Registry Protocol v0.2 adoption (all need cross-registry reconciliation)
+
+| # | Decision | Baseline chosen | Question |
+|---|---|---|---|
+| 23 | **Shared vectors** | Skills-generated vectors (`tests/vectors/zeptly-jcs-v1.skills-generated.json`) + stdlib reference verifier; the shared set was not supplied | Replace/reconcile with the protocol's shared vectors; every divergence is a contract bug in one side. |
+| 24 | **Seal payload entry shape** | `{path, sha256}` objects, `sha256` as `sha256:<hex>` | Bare hex? Extra per-entry fields? |
+| 25 | **Payload membership** | Everything except root `manifest.yaml` and `provenance/**`; `CHANGELOG.md`, `.gitkeep`, nested `manifest.yaml` are payload | Which files are excluded by name, if any? |
+| 26 | **`version` in the seal** | Included (amendment lists it); excluded from the artifact digest | Confirm. |
+| 27 | **`subjectSeal` on attestations** | Skills extension: attestations bind the seal too, because SKILL.md/evals/examples are outside the artifact digest | Shared attestation shape? Should payload be part of the digest instead? |
+| 28 | **Evaluation suite identity** | `{id: spec.evaluation.suite path, version: artifact version, digest: sha256(suite bytes)}` | Suites as versioned objects with their own ids? |
+| 29 | **Payload text policy** | UTF-8, no BOM, no NUL, LF-only for every payload file | Binary payload policy (decision 11 remains open). |
+| 30 | **Resolved lock entry shape** | `{registry,id,version,digest,digestAlgorithm,maturity,lifecycle,domain,directorySeal?}` | Shared shape; the amendment shows only the unresolved form. |
+| 31 | **`discovered` origin** | Replaces the local `spec.markers.provenance` marker; github-pr-triage migrated | Confirm migration of external discoveries. |
+| 32 | **Peer-index fixture** | Hand-written fixture only (`tests/fixtures/`); no real peer index was available | Supply a real peer-registry index to satisfy adoption test 5. |
+| 33 | **Synthetic prefix** | `example.` reserved for synthetic ids | Shared prefix across registries? |

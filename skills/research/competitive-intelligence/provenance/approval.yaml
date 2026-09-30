@@ -1,6 +1,7 @@
 apiVersion: registry.zeptly.dev/v1alpha1
 kind: Approval
-subject: {registry: skills, id: competitive-intelligence, version: 1.0.0, digest: 'sha256:32e2b634e6e30675a07a7c71840937c425476b0fc0ec1cc73fe2df5af69bf66b'}
+subject: {registry: skills, id: competitive-intelligence, version: 1.0.0, digest: 'sha256:48d2f447381022d72f403847fc4a15bc158e901eb2ab0c2bf8867002f8f2da3b',
+  digestAlgorithm: zeptly-jcs-v1, directorySeal: 'sha256:66309224502acc5e91b064ce769cb1d35cb7439c6d5ed49104bb73af09d734f0'}
 approvedBy: ['@Zeptly/registry-maintainers']
 approvedAt: '2026-09-29'
 basis: protocol-exception

@@ -13,7 +13,11 @@ STALE = [
     (r"agentgit://|zep://", set()),                                            # pointers are evidence:// or https:// only
     (r"security_reviewed_by", set()),                                          # now securityReviewedBy
     (r"evidence_level", set()),                                                # now evidenceLevel
-    (r"`imported`|`authored`", {"PROTOCOL-ALIGNMENT.md"}),                     # origin values are native | evolved | upstream-seed
+    (r"`imported`|`authored`", {"PROTOCOL-ALIGNMENT.md"}),                     # origin values: native | upstream-seed | discovered | refined | evolved
+    (r"ResolutionLock|resolution-lock", {"PROTOCOL-ALIGNMENT.md"}),            # now RuntimeLock / runtime-lock.schema.json
+    (r"markers\.provenance|markers: \{provenance", {"PROTOCOL-ALIGNMENT.md", "OPEN-DECISIONS.md"}),  # replaced by origin.type: discovered
+    (r"CRLF and lone CR become LF|normali[sz]ed bytes", set()),               # payload is rejected, never normalized
+    (r"test_digest_vectors", {"PROTOCOL-ALIGNMENT.md"}),                                          # replaced by tests/test_vectors.py
     (r"\btrust_tier\b", set()),                                                # now spec.trust.tier
 ]
 
@@ -33,6 +37,6 @@ def test_docs_do_not_mention_removed_fields_and_conventions():
 
 def test_documented_exit_codes_and_guarantees_exist():
     spec = (REPO / "docs" / "SPECIFICATION.md").read_text()
-    for needle in ("Duplicate YAML mapping keys", "Unhashable bundles fail loudly", "Index generation never skips",
-                   "schema-validated before success", "Exit codes"):
+    for needle in ("Parser rejection", "Unhashable bundles fail loudly", "Index generation never skips",
+                   "schema-validated before success", "Exit codes", "zeptly-jcs-v1", "Skills-generated vectors"):
         assert needle in spec

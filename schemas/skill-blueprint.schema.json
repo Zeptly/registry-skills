@@ -29,8 +29,10 @@
             "type": {
               "enum": [
                 "native",
-                "evolved",
-                "upstream-seed"
+                "upstream-seed",
+                "discovered",
+                "refined",
+                "evolved"
               ]
             }
           }
@@ -460,13 +462,10 @@
         "markers": {
           "type": "object",
           "additionalProperties": false,
-          "description": "Registry-local markers, NOT common origin values.",
+          "description": "Registry-local markers.",
           "properties": {
             "namespace": {
               "const": "synthetic"
-            },
-            "provenance": {
-              "const": "discovered"
             }
           }
         }

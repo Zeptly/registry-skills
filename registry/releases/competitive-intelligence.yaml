@@ -1,10 +1,11 @@
 schema: zeptly.ledger/v1
 registry: skills
+digestAlgorithm: zeptly-jcs-v1
 skill: competitive-intelligence
 releases:
 - version: 1.0.0
-  digest: sha256:32e2b634e6e30675a07a7c71840937c425476b0fc0ec1cc73fe2df5af69bf66b
-  directory_seal: sha256:8c6e8c16c2ea61f1615da10fd8779f4f6692c7761c3a179148c3216540401f68
+  digest: sha256:48d2f447381022d72f403847fc4a15bc158e901eb2ab0c2bf8867002f8f2da3b
+  directory_seal: sha256:66309224502acc5e91b064ce769cb1d35cb7439c6d5ed49104bb73af09d734f0
   contract_digest: sha256:81847edfe2e3465b82d6c012835d6833b180ee991c91775c900c60c4bc7b5913
   security_digest: sha256:8d1d8b7984df6b368af83fe28c39954eea1aafead8de81287e52ea49aa213b32
-  released_at: '2026-09-29'
+  released_at: '2026-09-30'

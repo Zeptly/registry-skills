@@ -1,14 +1,19 @@
-"""Loading skill bundles from the repository; canonical JSON, directory seal and artifact digest.
+"""Loading skill bundles; RFC 8785 canonical JSON; artifact digest and directory seal (digestAlgorithm zeptly-jcs-v1).
 
-Digest model (Registry Protocol v0.1 normalization):
+Protocol v0.2 contract as implemented by the Skills registry:
 
-  directory_seal  = sha256 over the canonical payload files (SKILL.md, evals/, examples/, ...)
-  artifact digest = sha256( JCS({"manifest": <projection>, "directorySeal": <seal>}) )
+  artifact digest = sha256( JCS( projection ) )
+      projection INCLUDES apiVersion, kind, metadata.{id, registry, origin}, spec, references, manifest provenance,
+      security.{classification, capabilities}
+      projection EXCLUDES metadata.version, metadata.maturity, metadata.lifecycle, attestations, security.approvals
 
-The manifest projection INCLUDES identity (apiVersion, kind, metadata.id/registry/origin), spec, references,
-provenance and security.classification/capabilities. It EXCLUDES metadata.version, metadata.maturity,
-metadata.lifecycle, attestations and security.approvals (governance state that changes about, or binds to,
-a fixed artifact). Files under provenance/ and CHANGELOG.md are outside the seal.
+  directory seal  = sha256( JCS( {registry, id, version, payload: [{path, sha256}, ...]} ) )
+      payload = every permitted regular file except the root manifest.yaml and provenance/**, ordered by Unicode
+      code points of the POSIX relative path; each sha256 is over the exact bytes (payload text must already be
+      UTF-8, BOM-free and LF-only: it is rejected, never normalized)
+
+Hashing is refused (BundleError) for symlinks, FIFOs/sockets/devices, unreadable entries, files outside the
+allow-list, case-colliding paths, and invalid payload text.
 """
 from __future__ import annotations
 
@@ -21,23 +26,24 @@ import stat
 from dataclasses import dataclass, field
 from decimal import Decimal
 from pathlib import Path
+from typing import NamedTuple
 
-import yaml
+from .errors import (BundleError, CanonicalizationError, RegistryError, UnsatisfiedRequest, YamlError,  # noqa: F401
+                     label_path)
+from .yamlsubset import SAFE_INT, load_yaml, load_yaml_text
 
+DIGEST_ALGORITHM = "zeptly-jcs-v1"
 TIERS = ("skills", "candidates", "synthetic")
 PRODUCTION_TIERS = ("skills", "candidates")
-# Not part of the canonical payload seal: evidence/approvals accumulate *about* an artifact, the changelog
-# is commentary, .gitkeep is a placeholder, and manifest.yaml is covered by the manifest projection.
-SEAL_EXCLUDED_TOP = {"provenance", "CHANGELOG.md"}
-SEAL_EXCLUDED_NAMES = {".gitkeep", "manifest.yaml"}
-# Manifest projection is an explicit include-list (see module docstring).
+# The only files outside the payload: the root metadata file (represented by the artifact digest) and mutable
+# records (evidence, approvals, stage, eval reports) under provenance/.
 PROJECTION_TOP = ("apiVersion", "kind", "spec", "references", "provenance")
 
-
-def normalize_text(data: bytes) -> bytes:
-    """Line-ending policy: CRLF and lone CR become LF. No other transformation (no BOM strip, no trim)."""
-    return data.replace(b"\r\n", b"\n").replace(b"\r", b"\n")
-
+MAX_DEPTH = 4
+SAFE_PART = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,99}$")
+TEXT_EXT = {".md", ".yaml", ".yml", ".json", ".txt", ".csv"}
+TOP_FILES = {"SKILL.md", "manifest.yaml", "CHANGELOG.md"}
+PROVENANCE_FILES = {"approval.yaml", "assessment.yaml", "evidence.yaml", "stage.yaml"}
 
 _FM = re.compile(r"\A---\r?\n(.*?)\r?\n---\r?\n?(.*)\Z", re.S)
 
@@ -47,138 +53,39 @@ def repo_root(start: Path | None = None) -> Path:
     for cand in [p, *p.parents]:
         if (cand / "schemas" / "envelope.schema.json").exists():
             return cand
-    raise SystemExit("not inside a registry-skills checkout (schemas/envelope.schema.json not found)")
-
-
-class RegistryError(Exception):
-    """A controlled, user-facing failure: the message is the diagnostic. CLI prints it without a traceback."""
-
-
-class YamlError(RegistryError):
-    """Unreadable/malformed YAML (including duplicate mapping keys), with file and path information."""
-
-
-class BundleError(RegistryError):
-    """A bundle cannot be hashed: it holds symlinks, unsupported filesystem entries or unreadable files."""
-
-
-class CanonicalizationError(RegistryError, ValueError):
-    """A value cannot be represented in canonical JSON (range, type or key violation), with its path."""
-
-
-class _StrictLoader(yaml.SafeLoader):
-    """SafeLoader that keeps ISO dates as strings (JSON Schema `format: date` operates on strings)."""
-
-
-_StrictLoader.yaml_implicit_resolvers = {
-    k: [(tag, rx) for tag, rx in v if tag != "tag:yaml.org,2002:timestamp"]
-    for k, v in yaml.SafeLoader.yaml_implicit_resolvers.items()
-}
-
-
-_MERGE_TAG = "tag:yaml.org,2002:merge"
-
-
-def _reject_duplicate_keys(loader: "_StrictLoader", root, source: str):
-    """Walk the composed node graph and reject duplicate mapping keys with file/line/path diagnostics.
-
-    `<<` merge keys are skipped (an explicit key legitimately overrides a merged one), so documents that are
-    valid today parse exactly as before."""
-    seen: set[int] = set()
-
-    def label(path: list) -> str:
-        out = ""
-        for p in path:
-            out += f"[{p}]" if isinstance(p, int) else (("." if out else "") + str(p))
-        return out or "<document root>"
-
-    def walk(node, path):
-        if id(node) in seen:
-            return
-        seen.add(id(node))
-        if isinstance(node, yaml.MappingNode):
-            keys: dict = {}
-            for knode, vnode in node.value:
-                if knode.tag == _MERGE_TAG:
-                    walk(vnode, path)
-                    continue
-                try:
-                    key = loader.construct_object(knode, deep=True)
-                    hash(key)
-                except Exception:  # noqa: BLE001 - unhashable/complex keys are reported by the normal constructor
-                    walk(vnode, path)
-                    continue
-                if key in keys:
-                    m, first = knode.start_mark, keys[key]
-                    raise YamlError(
-                        f"{source}: duplicate mapping key {key!r} at {label([*path, key])} "
-                        f"(line {m.line + 1}, column {m.column + 1}; first defined at line {first.line + 1})")
-                keys[key] = knode.start_mark
-                walk(vnode, [*path, key])
-        elif isinstance(node, yaml.SequenceNode):
-            for i, item in enumerate(node.value):
-                walk(item, [*path, i])
-
-    walk(root, [])
-
-
-def load_yaml_text(text: str, source: str):
-    """Parse YAML text with the registry's SafeLoader variant. Duplicate mapping keys are an error;
-    otherwise parsing behaviour is unchanged. Every failure is a YamlError naming `source`."""
-    loader = _StrictLoader(text)
-    try:
-        node = loader.get_single_node()
-        if node is None:
-            return None
-        _reject_duplicate_keys(loader, node, source)
-        return loader.construct_document(node)
-    except YamlError:
-        raise
-    except yaml.YAMLError as e:
-        raise YamlError(f"{source}: {str(e).strip().splitlines()[0] if str(e).strip() else type(e).__name__}"
-                        f"{_mark(e)}") from e
-    except (RecursionError, ValueError, OverflowError) as e:
-        raise YamlError(f"{source}: cannot parse ({type(e).__name__}: {e})") from e
-    finally:
-        loader.dispose()
-
-
-def _mark(e) -> str:
-    m = getattr(e, "problem_mark", None)
-    return f" (line {m.line + 1}, column {m.column + 1})" if m is not None else ""
-
-
-def load_yaml(path: Path):
-    p = Path(path)
-    try:
-        text = p.read_bytes().decode("utf-8")
-    except UnicodeDecodeError as e:
-        raise YamlError(f"{p}: not valid UTF-8 ({e.reason} at byte {e.start})") from e
-    except OSError as e:
-        raise YamlError(f"{p}: cannot read ({e.strerror or e})") from e
-    return load_yaml_text(text, str(p))
+    raise RegistryError("not inside a registry-skills checkout (schemas/envelope.schema.json not found)",
+                        code="not-a-checkout")
 
 
 def sha256_hex(data: bytes) -> str:
     return hashlib.sha256(data).hexdigest()
 
 
-def _jcs_number(v, where: str) -> str:
-    if isinstance(v, int):
-        if abs(v) > 2**53:
-            raise CanonicalizationError(f"{where}: integer {v} is outside the +/-2^53 range accepted by the canonical form")
-        return str(v)
-    if math.isnan(v) or math.isinf(v):
-        raise CanonicalizationError(f"{where}: {v} is not representable in canonical JSON")
+def cp_key(s: str) -> tuple:
+    """Explicit, locale-independent Unicode code-point ordering key."""
+    return tuple(ord(c) for c in s)
+
+
+# --------------------------------------------------------------------------- RFC 8785 canonical JSON
+def es_number(v: float) -> str:
+    """ECMAScript Number::toString for a finite double (shortest round-trip digits)."""
     if v == 0:
         return "0"
-    a = abs(v)
-    if a < 1e-6 or a >= 1e16:
-        raise CanonicalizationError(f"{where}: float {v!r} is outside the accepted magnitude range [1e-6, 1e16)")
-    r = repr(v)
-    if "e" in r or "E" in r:  # ES6 Number::toString uses plain decimals for 1e-6 <= |v| < 1e21
-        r = format(Decimal(r), "f")
-    return r[:-2] if r.endswith(".0") else r
+    sign = "-" if v < 0 else ""
+    tup = Decimal(repr(abs(v))).as_tuple()
+    n = len(tup.digits) + tup.exponent                     # decimal point position relative to the digit string
+    digits = "".join(map(str, tup.digits)).rstrip("0") or "0"
+    k = len(digits)
+    if k <= n <= 21:
+        body = digits + "0" * (n - k)
+    elif 0 < n <= 21:
+        body = digits[:n] + "." + digits[n:]
+    elif -6 < n <= 0:
+        body = "0." + "0" * (-n) + digits
+    else:
+        e = n - 1
+        body = digits[0] + ("." + digits[1:] if k > 1 else "") + "e" + ("+" if e >= 0 else "-") + str(abs(e))
+    return sign + body
 
 
 def _jcs(v, out: list, where: str):
@@ -189,13 +96,20 @@ def _jcs(v, out: list, where: str):
     elif v is False:
         out.append("false")
     elif isinstance(v, str):
-        try:
-            out.append(json.dumps(v, ensure_ascii=False))
-            out[-1].encode("utf-8")
-        except UnicodeEncodeError as e:
-            raise CanonicalizationError(f"{where}: string contains a lone surrogate and cannot be encoded as UTF-8") from e
-    elif isinstance(v, (int, float)):
-        out.append(_jcs_number(v, where))
+        if any(0xD800 <= ord(c) <= 0xDFFF for c in v):
+            raise CanonicalizationError(f"{where}: [lone-surrogate] string contains a lone surrogate",
+                                        code="lone-surrogate", file=where.split("#")[0], path=[])
+        out.append(json.dumps(v, ensure_ascii=False))
+    elif isinstance(v, int):
+        if abs(v) > SAFE_INT:
+            raise CanonicalizationError(f"{where}: [unsafe-integer] integer {v} is outside +/-(2^53-1)",
+                                        code="unsafe-integer", file=where.split("#")[0])
+        out.append(str(v))
+    elif isinstance(v, float):
+        if math.isnan(v) or math.isinf(v):
+            raise CanonicalizationError(f"{where}: [non-finite] {v} is not representable in canonical JSON",
+                                        code="non-finite", file=where.split("#")[0])
+        out.append(es_number(v))
     elif isinstance(v, (list, tuple)):
         out.append("[")
         for i, x in enumerate(v):
@@ -206,14 +120,14 @@ def _jcs(v, out: list, where: str):
     elif isinstance(v, dict):
         bad = [k for k in v if not isinstance(k, str)]
         if bad:
-            raise CanonicalizationError(f"{where}: object key {bad[0]!r} ({type(bad[0]).__name__}) is not a string")
+            raise CanonicalizationError(f"{where}: [non-string-key] object key {bad[0]!r} ({type(bad[0]).__name__}) is not a string",
+                                        code="non-string-key", file=where.split("#")[0])
+        for k in v:
+            if any(0xD800 <= ord(c) <= 0xDFFF for c in k):
+                raise CanonicalizationError(f"{where}: [lone-surrogate] object key contains a lone surrogate",
+                                            code="lone-surrogate", file=where.split("#")[0])
         out.append("{")
-        # RFC 8785 §3.2.3: sort by UTF-16 code units of the property names (NOT by code point)
-        try:
-            keys = sorted(v, key=lambda k: k.encode("utf-16-be"))
-        except UnicodeEncodeError as e:
-            raise CanonicalizationError(f"{where}: object key contains a lone surrogate") from e
-        for i, k in enumerate(keys):
+        for i, k in enumerate(sorted(v, key=lambda k: k.encode("utf-16-be"))):  # RFC 8785 3.2.3: UTF-16 code units
             if i:
                 out.append(",")
             out.append(json.dumps(k, ensure_ascii=False))
@@ -221,39 +135,73 @@ def _jcs(v, out: list, where: str):
             _jcs(v[k], out, f"{where}.{k}")
         out.append("}")
     else:
-        raise CanonicalizationError(f"{where}: unsupported type {type(v).__name__} for canonical JSON")
+        raise CanonicalizationError(f"{where}: [unsupported-type] {type(v).__name__} is not representable in canonical JSON",
+                                    code="unsupported-type", file=where.split("#")[0])
 
 
 def canonical_json(obj, label: str = "$") -> bytes:
-    """RFC 8785 (JCS) serialization, UTF-8 encoded. Failures raise CanonicalizationError naming the value path."""
+    """RFC 8785 (JCS) serialization, UTF-8 encoded. No Unicode normalization. Failures name the value path."""
     out: list = []
     _jcs(obj, out, label)
-    try:
-        return "".join(out).encode("utf-8")
-    except UnicodeEncodeError as e:
-        raise CanonicalizationError(f"{label}: value cannot be encoded as UTF-8") from e
-
-
-def cp_key(s: str) -> tuple:
-    """Explicit, locale-independent Unicode code-point ordering key."""
-    return tuple(ord(c) for c in s)
+    return "".join(out).encode("utf-8")
 
 
 def manifest_projection(manifest: dict) -> dict:
     sec = manifest.get("security") or {}
-    proj = {k: manifest.get(k) for k in PROJECTION_TOP}
     meta = manifest.get("metadata") or {}
+    proj = {k: manifest.get(k) for k in PROJECTION_TOP}
     proj["metadata"] = {"id": meta.get("id"), "registry": meta.get("registry"), "origin": meta.get("origin")}
     proj["security"] = {"classification": sec.get("classification"), "capabilities": sec.get("capabilities")}
     return proj
 
 
+# --------------------------------------------------------------------------- bundle contents
+def permitted_path(parts: tuple) -> bool:
+    """The Skills bundle allow-list (registry-local; the amendment leaves the list to each registry)."""
+    if len(parts) > MAX_DEPTH or not all(SAFE_PART.match(x) or x == ".gitkeep" for x in parts):
+        return False
+    name = parts[-1]
+    ext = "." + name.rsplit(".", 1)[-1].lower() if "." in name else ""
+    if len(parts) == 1:
+        return name in TOP_FILES
+    if name == ".gitkeep":
+        return parts[0] in ("evals", "examples", "provenance")
+    top = parts[0]
+    if top in ("evals", "examples"):
+        return ext in TEXT_EXT
+    if top == "provenance":
+        if len(parts) == 2:
+            return name in PROVENANCE_FILES or ext in (".md", ".txt")
+        return len(parts) == 3 and parts[1] == "eval-reports" and ext in (".yaml", ".yml")
+    return False
+
+
+def is_payload(rel: str) -> bool:
+    parts = rel.split("/")
+    return parts[0] != "provenance" and rel != "manifest.yaml"
+
+
+def payload_text_problem(data: bytes):
+    """(code, message) if payload text is not UTF-8, BOM-free, NUL-free and LF-only; else None."""
+    if data.startswith(b"\xef\xbb\xbf"):
+        return "payload-bom", "a UTF-8 byte order mark is not allowed"
+    try:
+        text = data.decode("utf-8")
+    except UnicodeDecodeError as e:
+        return "file-not-text", f"not valid UTF-8 ({e.reason} at byte {e.start})"
+    if "\x00" in text:
+        return "payload-nul", "NUL characters are not allowed"
+    if "\r" in text:
+        i = text.index("\r")
+        return "payload-line-endings", f"CR found at line {text.count(chr(10), 0, i) + 1}; payload text must be LF-only (CRLF and lone CR are rejected, not normalized)"
+    return None
+
+
 def walk_bundle(root: Path):
     """Classify every entry below `root` without following symlinks.
 
-    Returns a list of (relpath, path, kind) ordered by code points of the posix relative path, where kind is
-    'file' (regular file), 'symlink', 'other' (FIFO, socket, device, ...) or 'unreadable' (a directory that
-    could not be listed). Nothing is silently omitted."""
+    Returns [(relpath, path, kind)] ordered by code points of the posix relative path, kind in
+    'file' | 'symlink' | 'other' (FIFO, socket, device, ...) | 'unreadable'. Nothing is silently omitted."""
     found = []
 
     def onerror(e: OSError):
@@ -284,11 +232,17 @@ def walk_bundle(root: Path):
     return sorted(found, key=lambda t: cp_key(t[0]))
 
 
+class Problem(NamedTuple):
+    code: str
+    path: str      # repository-relative
+    message: str
+
+
 @dataclass
 class Bundle:
     root: Path            # repository root
     path: Path            # bundle directory
-    tier: str             # "skills" | "candidates"
+    tier: str             # "skills" | "candidates" | "synthetic"
     manifest: dict = field(default_factory=dict)
     manifest_error: str | None = None
 
@@ -326,11 +280,11 @@ class Bundle:
         if not p.exists():
             return None, "", "SKILL.md is missing"
         try:
-            text = normalize_text(p.read_bytes()).decode("utf-8")
+            text = p.read_bytes().decode("utf-8")
         except UnicodeDecodeError as e:
-            return None, "", f"{self.rel}/SKILL.md: not valid UTF-8 ({e.reason} at byte {e.start})"
+            return None, "", f"{self.rel}/SKILL.md: [invalid-utf8] not valid UTF-8 ({e.reason} at byte {e.start})"
         except OSError as e:
-            return None, "", f"{self.rel}/SKILL.md: cannot read ({e.strerror or e})"
+            return None, "", f"{self.rel}/SKILL.md: [unreadable] cannot read ({e.strerror or e})"
         m = _FM.match(text)
         if not m:
             return None, text, "SKILL.md lacks YAML frontmatter (--- ... ---)"
@@ -353,24 +307,8 @@ class Bundle:
         """Regular files only."""
         return [p for _, p, kind in self.entries() if kind == "file"]
 
-    def invalid_entries(self) -> list[tuple[str, str]]:
-        """(repo-relative path, kind) for everything that makes the bundle unhashable: symlinks (also in the bundle's own
-        path below the repository root), unsupported filesystem entries and unreadable directories."""
-        bad = []
-        try:
-            parts = self.path.relative_to(self.root).parts
-        except ValueError:
-            parts = ()
-        cur = self.root
-        for part in parts:
-            cur = cur / part
-            if cur.is_symlink():
-                bad.append((cur.relative_to(self.root).as_posix(), "symlink"))
-        bad += [(f"{self.rel}/{rel}", kind) for rel, _, kind in self.entries() if kind != "file"]
-        return bad
-
     def stage_with_error(self) -> tuple[str | None, str | None]:
-        """Candidate workflow stage from provenance/stage.yaml (outside the artifact digest)."""
+        """Candidate workflow stage from provenance/stage.yaml (outside the digest and the seal)."""
         p = self.path / "provenance" / "stage.yaml"
         if p.is_symlink() or not p.is_file():
             return None, None
@@ -379,46 +317,80 @@ class Bundle:
         except YamlError as e:
             return None, str(e)
         if not isinstance(data, dict) or not isinstance(data.get("stage"), str):
-            return None, f"{self.rel}/provenance/stage.yaml: expected a mapping with a string 'stage'"
+            return None, f"{self.rel}/provenance/stage.yaml: [invalid-stage] expected a mapping with a string 'stage'"
         return data["stage"], None
 
     def stage(self) -> str | None:
         return self.stage_with_error()[0]
 
-    # ---- digests -------------------------------------------------------
-    def _require_hashable(self):
-        bad = self.invalid_entries()
-        if bad:
-            what = ", ".join(f"{rel} ({kind})" for rel, kind in bad[:10])
-            more = f" and {len(bad) - 10} more" if len(bad) > 10 else ""
-            raise BundleError(f"{self.rel}: cannot compute seal/digest: bundle contains symlinks or unsupported "
-                              f"filesystem entries: {what}{more}")
-
-    def payload_files(self) -> list[tuple[str, Path]]:
-        self._require_hashable()
-        out = []
+    # ---- hashability ---------------------------------------------------
+    def hash_problems(self) -> list[Problem]:
+        """Everything that forbids computing a seal/digest, reported before any hashing happens."""
+        out: list[Problem] = []
+        try:
+            parts = self.path.relative_to(self.root).parts
+        except ValueError:
+            parts = ()
+        cur = self.root
+        for part in parts:
+            cur = cur / part
+            if cur.is_symlink():
+                out.append(Problem("symlink", cur.relative_to(self.root).as_posix(),
+                                   "symlinks are not allowed (never followed, never hashed)"))
+        seen: dict[str, str] = {}
         for rel, p, kind in self.entries():
-            if rel.split("/")[0] in SEAL_EXCLUDED_TOP or rel.split("/")[-1] in SEAL_EXCLUDED_NAMES:
+            full = f"{self.rel}/{rel}"
+            if kind == "symlink":
+                out.append(Problem("symlink", full, "symlinks are not allowed in bundles (never followed, never hashed)"))
                 continue
-            out.append((rel, p))
+            if kind == "unreadable":
+                out.append(Problem("unreadable-entry", full, "entry could not be listed or read"))
+                continue
+            if kind == "other":
+                out.append(Problem("unsupported-entry", full,
+                                   "not a regular file or directory (FIFO, socket, device, ...); not allowed in bundles"))
+                continue
+            folded = rel.casefold()
+            if folded in seen and seen[folded] != rel:
+                out.append(Problem("case-collision", full, f"path collides with {seen[folded]!r} on case-insensitive filesystems"))
+            seen.setdefault(folded, rel)
+            if not permitted_path(tuple(rel.split("/"))):
+                out.append(Problem("file-not-allowed", full, "path/name is not on the bundle allow-list"))
+                continue
+            if is_payload(rel):
+                try:
+                    data = p.read_bytes()
+                except OSError as e:
+                    out.append(Problem("unreadable-entry", full, f"cannot read file ({e.strerror or e})"))
+                    continue
+                prob = payload_text_problem(data)
+                if prob:
+                    out.append(Problem(prob[0], full, prob[1]))
         return out
 
+    def _require_hashable(self):
+        bad = self.hash_problems()
+        if bad:
+            what = "; ".join(f"{p.path} [{p.code}]" for p in bad[:10])
+            more = f" and {len(bad) - 10} more" if len(bad) > 10 else ""
+            raise BundleError(f"{self.rel}: cannot compute seal/digest: {what}{more}", code=bad[0].code,
+                              file=bad[0].path)
+
+    # ---- digests -------------------------------------------------------
+    def payload_files(self) -> list[tuple[str, Path]]:
+        self._require_hashable()
+        return [(rel, p) for rel, p, kind in self.entries() if kind == "file" and is_payload(rel)]
+
+    def seal_document(self) -> dict:
+        payload = [{"path": rel, "sha256": "sha256:" + sha256_hex(p.read_bytes())} for rel, p in self.payload_files()]
+        return {"registry": self.meta.get("registry"), "id": self.meta.get("id"),
+                "version": self.meta.get("version"), "payload": payload}
+
     def directory_seal(self) -> str:
-        """sha256 over canonical payload files: lines of `<relpath>\\0<sha256(normalized bytes)>\\n`."""
-        lines = []
-        for rel, p in self.payload_files():
-            try:
-                data = p.read_bytes()
-            except OSError as e:
-                raise BundleError(f"{self.rel}/{rel}: cannot read file ({e.strerror or e})") from e
-            lines.append(f"{rel}\0{sha256_hex(normalize_text(data))}\n")
-        return "sha256:" + sha256_hex("".join(lines).encode("utf-8"))
+        return "sha256:" + sha256_hex(canonical_json(self.seal_document(), f"{self.rel}/manifest.yaml#$"))
 
     def digest(self) -> str:
-        proj = manifest_projection(self.manifest)
-        canonical_json(proj, f"{self.rel}/manifest.yaml#$")  # fail first, with a path into the manifest
-        doc = {"manifest": proj, "directorySeal": self.directory_seal()}
-        return "sha256:" + sha256_hex(canonical_json(doc))
+        return "sha256:" + sha256_hex(canonical_json(manifest_projection(self.manifest), f"{self.rel}/manifest.yaml#$"))
 
     def contract_digest(self) -> str:
         sp = self.spec
@@ -448,12 +420,12 @@ def load_bundles(root: Path) -> list[Bundle]:
             try:
                 data = load_yaml(mf)
                 if not isinstance(data, dict):
-                    raise YamlError(f"{mf}: manifest is not a mapping")
+                    raise YamlError(f"{mf}: [not-a-mapping] manifest is not a mapping", code="not-a-mapping", file=str(mf))
                 b.manifest = data
             except RegistryError as e:
                 b.manifest_error = str(e)
             except Exception as e:  # noqa: BLE001 - reported as a validation error, never an uncaught exception
-                b.manifest_error = f"{mf}: {type(e).__name__}: {e}"
+                b.manifest_error = f"{mf}: [error] {type(e).__name__}: {e}"
             bundles.append(b)
     return bundles
 

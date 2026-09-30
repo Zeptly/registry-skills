@@ -1,4 +1,6 @@
-# Zeptly Registry Protocol v0.1: alignment of the Skills registry
+# Zeptly Registry Protocol: alignment of the Skills registry (v0.1 baseline, v0.2 adopted)
+
+> **Current contract: Protocol v0.2, `digestAlgorithm: zeptly-jcs-v1`.** The v0.1 tables below are retained as history; where they conflict with the v0.2 section at the end of this file, the v0.2 section and SPECIFICATION.md win.
 
 Scope: this file states what the Skills registry implements from the protocol and where it had to interpret or extend it. Only the protocol document was used; nothing was inferred from sibling registries. **Everything marked "interpretation" needs reconciliation against the other registries.**
 
@@ -63,3 +65,37 @@ Applied after the cross-registry audit. The shared canonicalization text itself 
 ## Local defect remediation (registry-local only; no shared-contract change)
 
 Duplicate YAML keys are now rejected with file/key-path/line diagnostics; seal and digest computation refuse bundles containing symlinks or unsupported filesystem entries (hashes of valid bundles are unchanged, golden vectors unchanged); index generation fails instead of omitting invalid bundles; generated indexes and resolution locks are validated against their schemas before success; malformed input and canonicalization failures produce controlled `error:` diagnostics (exit 2). See SPECIFICATION.md section 11. One behaviour differs from the draft digest handoff (DIGEST-CONTRACT.md, gap G6): the seal function no longer silently skips symlinks; it refuses. That changes nothing for valid bundles.
+
+## Protocol v0.2 adoption (amendment sections 1-13)
+
+Applied from `ZEPTLY_REGISTRY_PROTOCOL_V0_2_AMENDMENT.md`. **The shared golden vectors were not supplied to this registry.** The vectors in `tests/vectors/zeptly-jcs-v1.skills-generated.json` are Skills-generated from the amendment text, cross-checked by an independent stdlib-only implementation (`tests/vectors/reference_zeptly_jcs_v1.py`); they must be reconciled with the shared set before adoption can be called complete.
+
+| Amendment | Implementation |
+|---|---|
+| 1 Envelope, origin values, single evolution-kind location | Origin enum `native\|upstream-seed\|discovered\|refined\|evolved`; `metadata.origin.evolution.kind` only; `provenance.evolution` rejected. `github-pr-triage` migrated to `origin.type: discovered` (the local `spec.markers.provenance` marker was removed). |
+| 2 JSON-compatible YAML subset | `tools/zskill/yamlsubset.py`: all rejections in the amendment plus ambiguous numeric scalars; file/path/line diagnostics, exit 2. |
+| 3 JCS | `bundle.canonical_json`: UTF-16 key order, ECMAScript numbers, no normalization. LF-only payload enforced by rejection. |
+| 4 Hash contract | Artifact digest = sha256(JCS(projection)); directory seal over `{registry, id, version, payload[]}`; `digestAlgorithm` on index, ledger, references, attestations, approvals, reports and locks. |
+| 5 Vectors | See above; `tests/test_vectors.py`, CI runs the reference verifier and `make_vectors.py --check`. |
+| 6 References and locks | `RuntimeLock` (`schemas/runtime-lock.schema.json`); explicit `no-peer-index` entries; all nine unresolved codes implemented; `--peer-index`. |
+| 7 Evaluation and approval records | Evaluation attestations carry `suite{id,version,digest}` and `result`; promotion needs a passing result with matching suite and subject digest. |
+| 8 Index | `registry`, `digestAlgorithm`, `domain`, per-entry `registry`, `digestAlgorithm`, `domain`; sorted by code-point id, SemVer, digest; schema-validated. |
+| 9 Diagnostics | Exit 2 for malformed input/validation errors, 1 for unsatisfied requests; codes preserved; populated-baseline immutability tests use a real git baseline. |
+| 10 Synthetic | `example.` reserved prefix, marker, `synthetic` domain, `evidence://example/` pointers only, excluded from production index and locks. |
+| 11 Transitional exceptions | The six seeds stay `protocol-exception` (warning in CI, `evidenceLevel: unevaluated`, never an evaluation, `exception-expired` at 1.1.0, `expiresOnVersion` capped at 1.1.0, `exception-claims-evaluation`). Ledgers/index regenerated on this draft branch only (nothing published from `main`). |
+| 12 Deferred | Evidence Protocol, capability/gateway/model namespaces, signatures/authority, peer-index distribution, workspace overrides, traffic channels, nested QB execution, runtime-trigger versioning, transitive resolution and cycles are not implemented. |
+| 13 Adoption test | 1 shared vectors: **not met (not supplied)**; 2 local tests pass; 3 generated outputs validate; 4 populated-baseline immutability tests pass; 5 **peer-index fixture: only a hand-written fixture exists; a real peer index is still required**; 6 PR description records the algorithm and deferred protocols. |
+
+### Interpretations and deviations introduced by v0.2 (reconcile)
+
+1. **Seal entry shape** `{path, sha256}` with `sha256:<hex>` strings (the amendment says only "permitted payload file and its SHA-256").
+2. **Payload membership**: everything except root `manifest.yaml` and `provenance/**`. `CHANGELOG.md`, `.gitkeep` and nested `manifest.yaml` files became payload (v0.1 excluded the first two), so the seal changed.
+3. **`version` is part of the seal** (amendment lists it) and not of the artifact digest.
+4. **The artifact digest no longer embeds the seal** (v0.1 did).
+5. **`subjectSeal`** on attestations/approvals is a Skills extension (payload is outside the artifact digest).
+6. **Suite identity**: `{id: spec.evaluation.suite, version: artifact version, digest: sha256(suite bytes)}`.
+7. **Resolved lock entry** shape is our own (the amendment specifies only the unresolved form).
+8. **Payload text** additionally rejects NUL.
+9. **Prerelease rule**: a prerelease satisfies a range only if the range names a prerelease of the same major.minor.patch.
+10. **Exit codes changed**: validation errors are now exit 2 (was 1); 1 is reserved for unsatisfied requests.
+11. **Digests changed**: every released seed digest/seal changed because the algorithm changed. Permitted only because nothing was ever published from `main`.

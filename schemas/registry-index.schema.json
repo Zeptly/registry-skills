@@ -1,13 +1,15 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://registry.zeptly.dev/schemas/registry-index/v1alpha1.json",
-  "title": "Deterministic registry index (derived data)",
+  "title": "Deterministic registry index (derived data, Protocol v0.2)",
   "type": "object",
   "additionalProperties": false,
   "required": [
     "apiVersion",
     "kind",
     "registry",
+    "digestAlgorithm",
+    "domain",
     "entries"
   ],
   "properties": {
@@ -18,9 +20,13 @@
       "const": "RegistryIndex"
     },
     "registry": {
-      "const": "skills"
+      "type": "string",
+      "pattern": "^[a-z0-9]+(-[a-z0-9]+)*$"
     },
-    "namespace": {
+    "digestAlgorithm": {
+      "const": "zeptly-jcs-v1"
+    },
+    "domain": {
       "enum": [
         "production",
         "synthetic"
@@ -32,22 +38,29 @@
         "type": "object",
         "additionalProperties": false,
         "required": [
+          "registry",
           "kind",
           "id",
           "version",
           "digest",
+          "digestAlgorithm",
           "maturity",
           "lifecycle",
           "origin",
           "location",
-          "directorySeal"
+          "domain"
         ],
         "properties": {
+          "registry": {
+            "type": "string",
+            "pattern": "^[a-z0-9]+(-[a-z0-9]+)*$"
+          },
           "kind": {
             "type": "string"
           },
           "id": {
-            "type": "string"
+            "type": "string",
+            "pattern": "^[a-z0-9]+([.-][a-z0-9]+)*$"
           },
           "version": {
             "type": "string"
@@ -55,6 +68,13 @@
           "digest": {
             "type": "string",
             "pattern": "^sha256:[0-9a-f]{64}$"
+          },
+          "directorySeal": {
+            "type": "string",
+            "pattern": "^sha256:[0-9a-f]{64}$"
+          },
+          "digestAlgorithm": {
+            "const": "zeptly-jcs-v1"
           },
           "maturity": {
             "enum": [
@@ -87,14 +107,35 @@
               }
             }
           },
+          "domain": {
+            "enum": [
+              "production",
+              "synthetic"
+            ]
+          },
           "extensions": {
             "type": "object"
-          },
-          "directorySeal": {
-            "type": "string",
-            "pattern": "^sha256:[0-9a-f]{64}$"
           }
-        }
+        },
+        "allOf": [
+          {
+            "if": {
+              "properties": {
+                "maturity": {
+                  "const": "canonical"
+                }
+              },
+              "required": [
+                "maturity"
+              ]
+            },
+            "then": {
+              "required": [
+                "directorySeal"
+              ]
+            }
+          }
+        ]
       }
     }
   }

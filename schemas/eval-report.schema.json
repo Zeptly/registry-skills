@@ -24,10 +24,12 @@
       "type": "object",
       "additionalProperties": false,
       "required": [
-        "registry",
+        "digest",
+        "digestAlgorithm",
+        "directorySeal",
         "id",
-        "version",
-        "digest"
+        "registry",
+        "version"
       ],
       "properties": {
         "registry": {
@@ -42,6 +44,13 @@
           "pattern": "^\\d+\\.\\d+\\.\\d+(-[0-9A-Za-z.-]+)?$"
         },
         "digest": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        },
+        "digestAlgorithm": {
+          "const": "zeptly-jcs-v1"
+        },
+        "directorySeal": {
           "type": "string",
           "pattern": "^sha256:[0-9a-f]{64}$"
         }

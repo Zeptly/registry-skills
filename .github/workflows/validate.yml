@@ -30,6 +30,14 @@ jobs:
         run: |
           git fetch origin "${{ github.base_ref }}" --depth=1
           zskill ledger-check --base "origin/${{ github.base_ref }}"
+      - name: Digest-contract vectors are current and pass the independent reference implementation
+        run: |
+          python tests/vectors/make_vectors.py --check
+          python tests/vectors/reference_zeptly_jcs_v1.py tests/vectors/zeptly-jcs-v1.skills-generated.json
+      - name: Runtime lock validates against its schema
+        run: |
+          zskill resolve competitive-intelligence > /tmp/lock.json
+          python -c "import json,jsonschema; jsonschema.Draft202012Validator(json.load(open('schemas/runtime-lock.schema.json'))).validate(json.load(open('/tmp/lock.json')))"
       - name: Tooling tests
         run: pytest -q
       - name: Surface temporary protocol exceptions

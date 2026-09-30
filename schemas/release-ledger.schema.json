@@ -6,10 +6,11 @@
   "type": "object",
   "additionalProperties": false,
   "required": [
-    "schema",
+    "digestAlgorithm",
     "registry",
-    "skill",
-    "releases"
+    "releases",
+    "schema",
+    "skill"
   ],
   "properties": {
     "schema": {
@@ -68,6 +69,9 @@
     },
     "registry": {
       "const": "skills"
+    },
+    "digestAlgorithm": {
+      "const": "zeptly-jcs-v1"
     }
   }
 }

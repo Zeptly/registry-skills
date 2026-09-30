@@ -58,6 +58,7 @@ security:
   classification: moderate
   capabilities: [cap.code.read, cap.vcs.read]
   approvals:
-  - {type: governance, ref: 'bundle:provenance/approval.yaml', subjectDigest: 'sha256:9fe40802586d8aac4eba65e342dcec386f56b78f40bc025f2bfd70e403d92c3e',
+  - {type: governance, ref: 'bundle:provenance/approval.yaml', subjectDigest: 'sha256:b2bd1e8956318e62c23886e3c012a93345f376c2dc3445ff2552e1c2d8cd5e87',
+    digestAlgorithm: zeptly-jcs-v1, subjectSeal: 'sha256:013f4b48e345bb8d2cab75ec154e6ed378a5de577a10bb938738a3f3f66948ea',
     issuedAt: '2026-09-29'}
 attestations: []

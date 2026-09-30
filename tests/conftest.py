@@ -41,9 +41,26 @@ def rebind(root, rel, release=True):
     from zskill.validate import Registry
     b = next(x for x in Registry(root).bundles if x.rel == rel)
     dig = b.digest()
+    seal = b.directory_seal()
     ap = load(root, rel + "/provenance/approval.yaml")
-    ap["subject"].update(version=b.version, digest=dig)
+    ap["subject"].update(version=b.version, digest=dig, digestAlgorithm="zeptly-jcs-v1", directorySeal=seal)
     save(root, rel + "/provenance/approval.yaml", ap)
-    edit_manifest(root, rel, lambda m: m["security"]["approvals"][0].update(subjectDigest=dig))
+    edit_manifest(root, rel, lambda m: m["security"]["approvals"][0].update(
+        subjectDigest=dig, digestAlgorithm="zeptly-jcs-v1", subjectSeal=seal))
     if release and b.tier == "skills":
         ops.release(root, b.id)
+
+
+ALG = "zeptly-jcs-v1"
+
+
+def att(root, rel, ref="evidence://x/1", **over):
+    """A well-formed evaluation attestation bound to the bundle's current digest, seal and suite."""
+    from zskill.validate import Registry
+    b = next(x for x in Registry(root).bundles if x.rel == rel)
+    suite = "sha256:" + __import__("hashlib").sha256((b.path / b.spec["evaluation"]["suite"]).read_bytes()).hexdigest()
+    a = {"type": "evaluation", "ref": ref, "subjectDigest": b.digest(), "digestAlgorithm": ALG,
+         "subjectSeal": b.directory_seal(), "suite": {"id": b.spec["evaluation"]["suite"], "version": b.version, "digest": suite},
+         "result": "pass"}
+    a.update(over)
+    return a

@@ -1,0 +1,974 @@
+{
+ "contract": "zeptly-registry-protocol-v0.2 / digestAlgorithm zeptly-jcs-v1",
+ "digestAlgorithm": "zeptly-jcs-v1",
+ "status": "Skills-registry generated vectors. The shared protocol vector distribution was not supplied to this registry; these vectors cover the section 5 categories of the v0.2 amendment and must be reconciled with the shared set.",
+ "interpretations": [
+  "seal payload[] entries are objects {path, sha256} with sha256 written as 'sha256:<hex>'",
+  "payload = every file except the root manifest.yaml and provenance/**; CHANGELOG.md, .gitkeep and nested manifest.yaml are payload",
+  "the seal includes version; the artifact digest does not",
+  "payload text rejects NUL in addition to BOM, CR and invalid UTF-8"
+ ],
+ "jcs": [
+  {
+   "name": "key-order",
+   "input": "{\"b\":[1,2],\"a\":\"x\"}",
+   "expect": "{\"a\":\"x\",\"b\":[1,2]}"
+  },
+  {
+   "name": "nested-sort",
+   "input": "{\"z\":{\"b\":1,\"a\":2},\"a\":[{\"d\":1,\"c\":2}]}",
+   "expect": "{\"a\":[{\"c\":2,\"d\":1}],\"z\":{\"a\":2,\"b\":1}}"
+  },
+  {
+   "name": "utf16-order-not-codepoint",
+   "input": "{\"\\uff5e\":1,\"\\ud800\\udc00\":2}",
+   "expect": "{\"𐀀\":2,\"～\":1}"
+  },
+  {
+   "name": "utf16-order-bmp-vs-supplementary-mixed",
+   "input": "{\"\\ue000\":1,\"\\ud83d\\ude00\":2,\"\\u20ac\":3}",
+   "expect": "{\"€\":3,\"😀\":2,\"\":1}"
+  },
+  {
+   "name": "arrays-keep-order",
+   "input": "[3,1,2,{\"b\":1,\"a\":2}]",
+   "expect": "[3,1,2,{\"a\":2,\"b\":1}]"
+  },
+  {
+   "name": "literals-and-empties",
+   "input": "{\"n\":null,\"t\":true,\"f\":false,\"e\":[],\"o\":{}}",
+   "expect": "{\"e\":[],\"f\":false,\"n\":null,\"o\":{},\"t\":true}"
+  },
+  {
+   "name": "string-escapes",
+   "input": "\"\\u20ac\\n\\u000f\\\"\\\\/\\u007f\\u2028\"",
+   "expect": "\"€\\n\\u000f\\\"\\\\/ \""
+  },
+  {
+   "name": "control-chars-lowercase-hex",
+   "input": "\"\\u001f\\b\\t\\f\\r\"",
+   "expect": "\"\\u001f\\b\\t\\f\\r\""
+  },
+  {
+   "name": "unicode-no-normalization-nfc",
+   "input": "\"\\u00e9\"",
+   "expect": "\"é\""
+  },
+  {
+   "name": "unicode-no-normalization-nfd",
+   "input": "\"e\\u0301\"",
+   "expect": "\"é\""
+  },
+  {
+   "name": "emoji-literal",
+   "input": "\"\\ud83d\\ude00\"",
+   "expect": "\"😀\""
+  },
+  {
+   "name": "numbers-decimal-forms",
+   "input": "[0.8,1.0,-0.0,100.0,0.000001,0.00001,0.5,123.456,3]",
+   "expect": "[0.8,1,0,100,0.000001,0.00001,0.5,123.456,3]"
+  },
+  {
+   "name": "numbers-exponent-forms",
+   "input": "[1e-7,1e21,1e20,1.5e300,5e-324,1.7976931348623157e308,1e-6,123456789012345680000.0]",
+   "expect": "[1e-7,1e+21,100000000000000000000,1.5e+300,5e-324,1.7976931348623157e+308,0.000001,123456789012345680000]"
+  },
+  {
+   "name": "numbers-shortest-roundtrip",
+   "input": "[0.30000000000000004,4.35,2.5e-5]",
+   "expect": "[0.30000000000000004,4.35,0.000025]"
+  },
+  {
+   "name": "integers-safe-range",
+   "input": "[9007199254740991,-9007199254740991,0]",
+   "expect": "[9007199254740991,-9007199254740991,0]"
+  },
+  {
+   "name": "unsafe-integer-positive",
+   "input": "[9007199254740992]",
+   "reject": "unsafe-integer"
+  },
+  {
+   "name": "unsafe-integer-negative",
+   "input": "[-9007199254740992]",
+   "reject": "unsafe-integer"
+  },
+  {
+   "name": "non-finite-overflow",
+   "input": "[1e999]",
+   "reject": "non-finite"
+  },
+  {
+   "name": "lone-surrogate-value",
+   "input": "\"\\ud800\"",
+   "reject": "lone-surrogate"
+  },
+  {
+   "name": "lone-surrogate-key",
+   "input": "{\"\\udc00\":1}",
+   "reject": "lone-surrogate"
+  }
+ ],
+ "payloadText": [
+  {
+   "name": "ok-lf-utf8",
+   "inputHex": "636166c3a90a6c696e6520320a",
+   "expect": "ok"
+  },
+  {
+   "name": "ok-empty",
+   "inputHex": "",
+   "expect": "ok"
+  },
+  {
+   "name": "ok-no-trailing-newline",
+   "inputHex": "616263",
+   "expect": "ok"
+  },
+  {
+   "name": "reject-crlf",
+   "inputHex": "610d0a620a",
+   "expect": "payload-line-endings"
+  },
+  {
+   "name": "reject-lone-cr",
+   "inputHex": "610d62",
+   "expect": "payload-line-endings"
+  },
+  {
+   "name": "reject-bom",
+   "inputHex": "efbbbf6162630a",
+   "expect": "payload-bom"
+  },
+  {
+   "name": "reject-nul",
+   "inputHex": "6100620a",
+   "expect": "payload-nul"
+  },
+  {
+   "name": "reject-invalid-utf8",
+   "inputHex": "636166e90a",
+   "expect": "file-not-text"
+  }
+ ],
+ "parser": [
+  {
+   "name": "plain-types",
+   "yaml": "a: 1\nb: [true, null, 0.85, 1.5, x]\nc: -3\n",
+   "expect": {
+    "a": 1,
+    "b": [
+     true,
+     null,
+     0.85,
+     1.5,
+     "x"
+    ],
+    "c": -3
+   }
+  },
+  {
+   "name": "yes-no-on-off-are-strings",
+   "yaml": "a: [yes, no, on, off, y, n, Yes, NO]\n",
+   "expect": {
+    "a": [
+     "yes",
+     "no",
+     "on",
+     "off",
+     "y",
+     "n",
+     "Yes",
+     "NO"
+    ]
+   }
+  },
+  {
+   "name": "true-false-forms",
+   "yaml": "a: [true, True, TRUE, false, False, FALSE]\n",
+   "expect": {
+    "a": [
+     true,
+     true,
+     true,
+     false,
+     false,
+     false
+    ]
+   }
+  },
+  {
+   "name": "timestamps-stay-strings",
+   "yaml": "a: 2026-09-29\nb: 2026-09-29T00:00:00Z\n",
+   "expect": {
+    "a": "2026-09-29",
+    "b": "2026-09-29T00:00:00Z"
+   }
+  },
+  {
+   "name": "version-like-strings",
+   "yaml": "a: 1.0.0\nb: 1.0.0-rc.1\nc: v1\n",
+   "expect": {
+    "a": "1.0.0",
+    "b": "1.0.0-rc.1",
+    "c": "v1"
+   }
+  },
+  {
+   "name": "json-exponent-is-float",
+   "yaml": "a: 1e3\nb: 1.5E-2\n",
+   "expect": {
+    "a": 1000.0,
+    "b": 0.015
+   }
+  },
+  {
+   "name": "quoted-numbers-are-strings",
+   "yaml": "a: '010'\nb: \"0x1F\"\nc: '1'\n",
+   "expect": {
+    "a": "010",
+    "b": "0x1F",
+    "c": "1"
+   }
+  },
+  {
+   "name": "explicit-str-tag",
+   "yaml": "a: !!str 123\n",
+   "expect": {
+    "a": "123"
+   }
+  },
+  {
+   "name": "explicit-int-tag",
+   "yaml": "a: !!int 12\n",
+   "expect": {
+    "a": 12
+   }
+  },
+  {
+   "name": "empty-document",
+   "yaml": "",
+   "expect": null
+  },
+  {
+   "name": "comments-ignored",
+   "yaml": "# c\na: 1 # trailing\n",
+   "expect": {
+    "a": 1
+   }
+  },
+  {
+   "name": "flow-and-block",
+   "yaml": "a: {b: [1, 2], c: d}\ne:\n  - f\n",
+   "expect": {
+    "a": {
+     "b": [
+      1,
+      2
+     ],
+     "c": "d"
+    },
+    "e": [
+     "f"
+    ]
+   }
+  },
+  {
+   "name": "safe-integer-max",
+   "yaml": "a: 9007199254740991\nb: -9007199254740991\n",
+   "expect": {
+    "a": 9007199254740991,
+    "b": -9007199254740991
+   }
+  },
+  {
+   "name": "reject-duplicate-key",
+   "yaml": "a: 1\na: 2\n",
+   "expect": {
+    "reject": "duplicate-key"
+   }
+  },
+  {
+   "name": "reject-duplicate-key-nested",
+   "yaml": "a:\n  b: 1\n  b: 2\n",
+   "expect": {
+    "reject": "duplicate-key"
+   }
+  },
+  {
+   "name": "reject-anchor",
+   "yaml": "a: &x 1\n",
+   "expect": {
+    "reject": "anchor"
+   }
+  },
+  {
+   "name": "reject-alias",
+   "yaml": "a: *x\n",
+   "expect": {
+    "reject": "alias"
+   }
+  },
+  {
+   "name": "reject-merge-key",
+   "yaml": "a: {<<: {b: 1}}\n",
+   "expect": {
+    "reject": "merge-key"
+   }
+  },
+  {
+   "name": "reject-non-string-key-int",
+   "yaml": "1: a\n",
+   "expect": {
+    "reject": "non-string-key"
+   }
+  },
+  {
+   "name": "reject-non-string-key-bool",
+   "yaml": "true: a\n",
+   "expect": {
+    "reject": "non-string-key"
+   }
+  },
+  {
+   "name": "reject-non-string-key-null",
+   "yaml": "~: a\n",
+   "expect": {
+    "reject": "non-string-key"
+   }
+  },
+  {
+   "name": "reject-multiple-documents",
+   "yaml": "a: 1\n---\nb: 2\n",
+   "expect": {
+    "reject": "multiple-documents"
+   }
+  },
+  {
+   "name": "reject-unsupported-tag-binary",
+   "yaml": "a: !!binary abc\n",
+   "expect": {
+    "reject": "unsupported-tag"
+   }
+  },
+  {
+   "name": "reject-unsupported-tag-python",
+   "yaml": "a: !!python/object:os.system x\n",
+   "expect": {
+    "reject": "unsupported-tag"
+   }
+  },
+  {
+   "name": "reject-unsupported-tag-custom",
+   "yaml": "a: !custom x\n",
+   "expect": {
+    "reject": "unsupported-tag"
+   }
+  },
+  {
+   "name": "reject-unsafe-integer",
+   "yaml": "a: 9007199254740992\n",
+   "expect": {
+    "reject": "unsafe-integer"
+   }
+  },
+  {
+   "name": "reject-unsafe-integer-negative",
+   "yaml": "a: -9007199254740992\n",
+   "expect": {
+    "reject": "unsafe-integer"
+   }
+  },
+  {
+   "name": "reject-non-finite-inf",
+   "yaml": "a: .inf\n",
+   "expect": {
+    "reject": "ambiguous-scalar"
+   }
+  },
+  {
+   "name": "reject-non-finite-nan",
+   "yaml": "a: .nan\n",
+   "expect": {
+    "reject": "ambiguous-scalar"
+   }
+  },
+  {
+   "name": "reject-non-finite-overflow",
+   "yaml": "a: 1e999\n",
+   "expect": {
+    "reject": "non-finite"
+   }
+  },
+  {
+   "name": "reject-leading-zero-int",
+   "yaml": "a: 010\n",
+   "expect": {
+    "reject": "ambiguous-scalar"
+   }
+  },
+  {
+   "name": "reject-plus-int",
+   "yaml": "a: +1\n",
+   "expect": {
+    "reject": "ambiguous-scalar"
+   }
+  },
+  {
+   "name": "reject-hex",
+   "yaml": "a: 0x1F\n",
+   "expect": {
+    "reject": "ambiguous-scalar"
+   }
+  },
+  {
+   "name": "reject-octal",
+   "yaml": "a: 0o17\n",
+   "expect": {
+    "reject": "ambiguous-scalar"
+   }
+  },
+  {
+   "name": "reject-bare-fraction",
+   "yaml": "a: .5\n",
+   "expect": {
+    "reject": "ambiguous-scalar"
+   }
+  },
+  {
+   "name": "reject-trailing-dot",
+   "yaml": "a: 1.\n",
+   "expect": {
+    "reject": "ambiguous-scalar"
+   }
+  },
+  {
+   "name": "reject-explicit-bool-yes",
+   "yaml": "a: !!bool yes\n",
+   "expect": {
+    "reject": "invalid-scalar"
+   }
+  },
+  {
+   "name": "reject-bom",
+   "yaml": "﻿a: 1\n",
+   "expect": {
+    "reject": "bom"
+   }
+  },
+  {
+   "name": "reject-nul-escape",
+   "yaml": "a: \"x\\0y\"\n",
+   "expect": {
+    "reject": "nul"
+   }
+  },
+  {
+   "name": "reject-lone-surrogate-escape",
+   "yaml": "a: \"\\uD800\"\n",
+   "expect": {
+    "reject": "lone-surrogate"
+   }
+  },
+  {
+   "name": "reject-syntax",
+   "yaml": "a: [1\n",
+   "expect": {
+    "reject": "syntax"
+   }
+  },
+  {
+   "name": "reject-invalid-utf8",
+   "inputHex": "613a20636166e90a",
+   "expect": {
+    "reject": "invalid-utf8"
+   }
+  },
+  {
+   "name": "reject-bom-bytes",
+   "inputHex": "efbbbf613a20310a",
+   "expect": {
+    "reject": "bom"
+   }
+  },
+  {
+   "name": "reject-nul-byte",
+   "inputHex": "613a2031000a",
+   "expect": {
+    "reject": "nul"
+   }
+  }
+ ],
+ "bundle": {
+  "manifest": {
+   "apiVersion": "registry.zeptly.dev/v1alpha1",
+   "kind": "SkillBlueprint",
+   "metadata": {
+    "id": "golden.example",
+    "version": "9.9.9",
+    "registry": "skills",
+    "origin": {
+     "type": "native"
+    },
+    "maturity": "canonical",
+    "lifecycle": "revoked"
+   },
+   "spec": {
+    "title": "Golden",
+    "threshold": 0.8,
+    "count": 3,
+    "flag": true,
+    "nothing": null,
+    "uni": "€😀"
+   },
+   "references": [
+    {
+     "registry": "skills",
+     "id": "other",
+     "version": "^1.0.0",
+     "digest": null
+    }
+   ],
+   "provenance": {
+    "createdAt": "2026-01-01T00:00:00Z",
+    "authors": [],
+    "sourceRefs": [],
+    "transformations": []
+   },
+   "security": {
+    "classification": "low",
+    "capabilities": [
+     "cap.a.b"
+    ],
+    "approvals": [
+     {
+      "type": "governance",
+      "ref": "bundle:x",
+      "subjectDigest": "sha256:0000000000000000000000000000000000000000000000000000000000000000",
+      "digestAlgorithm": "zeptly-jcs-v1"
+     }
+    ]
+   },
+   "attestations": [
+    {
+     "type": "evaluation",
+     "ref": "evidence://x",
+     "subjectDigest": "sha256:0000000000000000000000000000000000000000000000000000000000000000",
+     "digestAlgorithm": "zeptly-jcs-v1"
+    }
+   ]
+  },
+  "files": [
+   {
+    "path": "CHANGELOG.md",
+    "contentHex": "746f702d6c6576656c204348414e47454c4f472e6d64204953207061796c6f616420696e2076302e320a"
+   },
+   {
+    "path": "SKILL.md",
+    "contentHex": "2d2d2d0a6e616d653a20676f6c64656e2d6578616d706c650a2d2d2d0a626f64790a"
+   },
+   {
+    "path": "evals/.gitkeep",
+    "contentHex": ""
+   },
+   {
+    "path": "evals/suite.yaml",
+    "contentHex": "613a20310a"
+   },
+   {
+    "path": "examples/B.md",
+    "contentHex": "420a"
+   },
+   {
+    "path": "examples/a-b.md",
+    "contentHex": "612d620a"
+   },
+   {
+    "path": "examples/a.b.md",
+    "contentHex": "612e620a"
+   },
+   {
+    "path": "examples/a2.md",
+    "contentHex": "61320a"
+   },
+   {
+    "path": "examples/e.md",
+    "contentHex": "c3a90a"
+   },
+   {
+    "path": "examples/manifest.yaml",
+    "contentHex": "6e6573746564206d616e69666573742e79616d6c204953207061796c6f616420286f6e6c792074686520726f6f74206d657461646174612066696c65206973206578636c75646564290a"
+   },
+   {
+    "path": "provenance/approval.yaml",
+    "contentHex": "6578636c756465643a206d757461626c6520676f7665726e616e6365207265636f72640a"
+   },
+   {
+    "path": "provenance/eval-reports/1.0.0.yaml",
+    "contentHex": "6578636c756465643a206d757461626c65207265636f72640a"
+   }
+  ],
+  "expected": {
+   "projectionJcs": "{\"apiVersion\":\"registry.zeptly.dev/v1alpha1\",\"kind\":\"SkillBlueprint\",\"metadata\":{\"id\":\"golden.example\",\"origin\":{\"type\":\"native\"},\"registry\":\"skills\"},\"provenance\":{\"authors\":[],\"createdAt\":\"2026-01-01T00:00:00Z\",\"sourceRefs\":[],\"transformations\":[]},\"references\":[{\"digest\":null,\"id\":\"other\",\"registry\":\"skills\",\"version\":\"^1.0.0\"}],\"security\":{\"capabilities\":[\"cap.a.b\"],\"classification\":\"low\"},\"spec\":{\"count\":3,\"flag\":true,\"nothing\":null,\"threshold\":0.8,\"title\":\"Golden\",\"uni\":\"€😀\"}}",
+   "artifactDigest": "sha256:2f439770f7378e2ae5a0430a5bcb19c49b3c574eacd17fad2673c29215a8200f",
+   "sealDocumentJcs": "{\"id\":\"golden.example\",\"payload\":[{\"path\":\"CHANGELOG.md\",\"sha256\":\"sha256:5673418d121880758103275f3d470a19ce06f5b712a0a29e6197264d02d4ea03\"},{\"path\":\"SKILL.md\",\"sha256\":\"sha256:b7625a38eae24b9ba79f9cf2b48b48c6ee18d62bac9bbf7ca329b60a9dc53090\"},{\"path\":\"evals/.gitkeep\",\"sha256\":\"sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855\"},{\"path\":\"evals/suite.yaml\",\"sha256\":\"sha256:37b128c59f1f5097f73f82691cb519f1f568667faab5ced1b4ab979d36837eae\"},{\"path\":\"examples/B.md\",\"sha256\":\"sha256:c0cde77fa8fef97d476c10aad3d2d54fcc2f336140d073651c2dcccf1e379fd6\"},{\"path\":\"examples/a-b.md\",\"sha256\":\"sha256:7d17362cca32429c54dcaf0ffe6e48a16d6ae8f404b46da4f518281c532757e9\"},{\"path\":\"examples/a.b.md\",\"sha256\":\"sha256:3028acf5e4c1117ab3d2bfbf5ecffb4d3147c9acb452fb375f27a57acd0bc9b7\"},{\"path\":\"examples/a2.md\",\"sha256\":\"sha256:333d36c15ed252b52c66eda5bf9c1ad3e730b6d6eef9401a336db63ccf7558e7\"},{\"path\":\"examples/e.md\",\"sha256\":\"sha256:edd3a863872a04239eb29ad4bc12fc892b3d4ae57cc7e786a3697816f8e141c2\"},{\"path\":\"examples/manifest.yaml\",\"sha256\":\"sha256:398a383010b7de444b673ea7c93e2c1d33922972af9b238b0b6a55e0aedfe25f\"}],\"registry\":\"skills\",\"version\":\"9.9.9\"}",
+   "directorySeal": "sha256:88278d2f1aa42cc216a5fcf881bc0701fce77f548d1c06fc178bb55bed018dc6"
+  },
+  "mutations": [
+   {
+    "set": [
+     {
+      "path": [
+       "metadata",
+       "version"
+      ],
+      "value": "0.0.1"
+     }
+    ],
+    "name": "version-bump",
+    "expectDigest": "same",
+    "expectSeal": "different",
+    "digest": "sha256:2f439770f7378e2ae5a0430a5bcb19c49b3c574eacd17fad2673c29215a8200f",
+    "seal": "sha256:aa5ebe11209fd1d37ca03a2dcc4638069121c257c6a1726400f29bb9f93e3ce1"
+   },
+   {
+    "set": [
+     {
+      "path": [
+       "metadata",
+       "maturity"
+      ],
+      "value": "candidate"
+     },
+     {
+      "path": [
+       "metadata",
+       "lifecycle"
+      ],
+      "value": "active"
+     }
+    ],
+    "name": "maturity-and-lifecycle",
+    "expectDigest": "same",
+    "expectSeal": "same",
+    "digest": "sha256:2f439770f7378e2ae5a0430a5bcb19c49b3c574eacd17fad2673c29215a8200f",
+    "seal": "sha256:88278d2f1aa42cc216a5fcf881bc0701fce77f548d1c06fc178bb55bed018dc6"
+   },
+   {
+    "set": [
+     {
+      "path": [
+       "attestations"
+      ],
+      "value": []
+     }
+    ],
+    "name": "attestations-replaced",
+    "expectDigest": "same",
+    "expectSeal": "same",
+    "digest": "sha256:2f439770f7378e2ae5a0430a5bcb19c49b3c574eacd17fad2673c29215a8200f",
+    "seal": "sha256:88278d2f1aa42cc216a5fcf881bc0701fce77f548d1c06fc178bb55bed018dc6"
+   },
+   {
+    "delete": [
+     {
+      "path": [
+       "security",
+       "approvals"
+      ]
+     }
+    ],
+    "name": "approvals-removed",
+    "expectDigest": "same",
+    "expectSeal": "same",
+    "digest": "sha256:2f439770f7378e2ae5a0430a5bcb19c49b3c574eacd17fad2673c29215a8200f",
+    "seal": "sha256:88278d2f1aa42cc216a5fcf881bc0701fce77f548d1c06fc178bb55bed018dc6"
+   },
+   {
+    "set": [
+     {
+      "path": [
+       "x-extra"
+      ],
+      "value": {
+       "a": 1
+      }
+     }
+    ],
+    "name": "unlisted-top-level-field-ignored",
+    "expectDigest": "same",
+    "expectSeal": "same",
+    "digest": "sha256:2f439770f7378e2ae5a0430a5bcb19c49b3c574eacd17fad2673c29215a8200f",
+    "seal": "sha256:88278d2f1aa42cc216a5fcf881bc0701fce77f548d1c06fc178bb55bed018dc6"
+   },
+   {
+    "set": [
+     {
+      "path": [
+       "metadata",
+       "note"
+      ],
+      "value": "n"
+     }
+    ],
+    "name": "unlisted-metadata-field-ignored",
+    "expectDigest": "same",
+    "expectSeal": "same",
+    "digest": "sha256:2f439770f7378e2ae5a0430a5bcb19c49b3c574eacd17fad2673c29215a8200f",
+    "seal": "sha256:88278d2f1aa42cc216a5fcf881bc0701fce77f548d1c06fc178bb55bed018dc6"
+   },
+   {
+    "reverseTopLevelKeys": true,
+    "name": "manifest-key-order",
+    "expectDigest": "same",
+    "expectSeal": "same",
+    "digest": "sha256:2f439770f7378e2ae5a0430a5bcb19c49b3c574eacd17fad2673c29215a8200f",
+    "seal": "sha256:88278d2f1aa42cc216a5fcf881bc0701fce77f548d1c06fc178bb55bed018dc6"
+   },
+   {
+    "set": [
+     {
+      "path": [
+       "metadata",
+       "origin",
+       "type"
+      ],
+      "value": "upstream-seed"
+     }
+    ],
+    "name": "origin-type",
+    "expectDigest": "different",
+    "expectSeal": "same",
+    "digest": "sha256:99502b3d7803d58e612b09dd1741dfc116975f3e873f4298f5cc08390eb50ec7",
+    "seal": "sha256:88278d2f1aa42cc216a5fcf881bc0701fce77f548d1c06fc178bb55bed018dc6"
+   },
+   {
+    "set": [
+     {
+      "path": [
+       "metadata",
+       "id"
+      ],
+      "value": "golden.other"
+     }
+    ],
+    "name": "identity-id",
+    "expectDigest": "different",
+    "expectSeal": "different",
+    "digest": "sha256:64e7508c06cb14b9a6ed0e368eb34b072470bb1b68efc526c63e910083beb49a",
+    "seal": "sha256:60f763eac15e54438456c9dcdbd8f63aea0275d42d13329c47006e227876344d"
+   },
+   {
+    "set": [
+     {
+      "path": [
+       "spec",
+       "title"
+      ],
+      "value": "Different"
+     }
+    ],
+    "name": "spec-title",
+    "expectDigest": "different",
+    "expectSeal": "same",
+    "digest": "sha256:dbf622575cacecbf86262cf15dc58a9eb17e480cc2e0d77769cd5546ae7e20bf",
+    "seal": "sha256:88278d2f1aa42cc216a5fcf881bc0701fce77f548d1c06fc178bb55bed018dc6"
+   },
+   {
+    "set": [
+     {
+      "path": [
+       "spec",
+       "approvalRequired"
+      ],
+      "value": true
+     }
+    ],
+    "name": "spec-runtime-approval-requirement",
+    "expectDigest": "different",
+    "expectSeal": "same",
+    "digest": "sha256:c16561115a129496f2a2abc6cd3c1a11bb1c9a885302626f46ecc834497fc566",
+    "seal": "sha256:88278d2f1aa42cc216a5fcf881bc0701fce77f548d1c06fc178bb55bed018dc6"
+   },
+   {
+    "set": [
+     {
+      "path": [
+       "references"
+      ],
+      "value": [
+       {
+        "registry": "skills",
+        "id": "other",
+        "version": "^2.0.0",
+        "digest": null
+       }
+      ]
+     }
+    ],
+    "name": "references-version",
+    "expectDigest": "different",
+    "expectSeal": "same",
+    "digest": "sha256:d14248893e24c37f26339300b45419813c1add947a12699d63fc14433c0d2b43",
+    "seal": "sha256:88278d2f1aa42cc216a5fcf881bc0701fce77f548d1c06fc178bb55bed018dc6"
+   },
+   {
+    "set": [
+     {
+      "path": [
+       "provenance",
+       "createdAt"
+      ],
+      "value": "2027-01-01T00:00:00Z"
+     }
+    ],
+    "name": "provenance-created-at",
+    "expectDigest": "different",
+    "expectSeal": "same",
+    "digest": "sha256:1bfa4502606d0ea1930155b4f66935bb62f93dba7d18d4cab24acbc40ca81bac",
+    "seal": "sha256:88278d2f1aa42cc216a5fcf881bc0701fce77f548d1c06fc178bb55bed018dc6"
+   },
+   {
+    "set": [
+     {
+      "path": [
+       "security",
+       "classification"
+      ],
+      "value": "moderate"
+     }
+    ],
+    "name": "classification",
+    "expectDigest": "different",
+    "expectSeal": "same",
+    "digest": "sha256:92e61fdc9eb56931f785e54916849c04ac95841fb0d69a103dea6b034b0c8ede",
+    "seal": "sha256:88278d2f1aa42cc216a5fcf881bc0701fce77f548d1c06fc178bb55bed018dc6"
+   },
+   {
+    "set": [
+     {
+      "path": [
+       "security",
+       "capabilities"
+      ],
+      "value": [
+       "cap.a.b",
+       "cap.c.d"
+      ]
+     }
+    ],
+    "name": "capabilities",
+    "expectDigest": "different",
+    "expectSeal": "same",
+    "digest": "sha256:24753d8d813e98e363114766c2d17b50cfa40913efb953f5e7e6c88158e35138",
+    "seal": "sha256:88278d2f1aa42cc216a5fcf881bc0701fce77f548d1c06fc178bb55bed018dc6"
+   },
+   {
+    "putFiles": [
+     {
+      "path": "SKILL.md",
+      "contentHex": "2d2d2d0a6e616d653a20676f6c64656e2d6578616d706c650a2d2d2d0a6368616e6765640a"
+     }
+    ],
+    "name": "payload-skill-md-not-in-artifact-digest",
+    "expectDigest": "same",
+    "expectSeal": "different",
+    "digest": "sha256:2f439770f7378e2ae5a0430a5bcb19c49b3c574eacd17fad2673c29215a8200f",
+    "seal": "sha256:8ee9f31e2f861159206afaba13c6c3a598960d6deffab339bbb2835b050396db"
+   },
+   {
+    "putFiles": [
+     {
+      "path": "provenance/approval.yaml",
+      "contentHex": "646966666572656e743a20747275650a"
+     }
+    ],
+    "name": "provenance-dir-file",
+    "expectDigest": "same",
+    "expectSeal": "same",
+    "digest": "sha256:2f439770f7378e2ae5a0430a5bcb19c49b3c574eacd17fad2673c29215a8200f",
+    "seal": "sha256:88278d2f1aa42cc216a5fcf881bc0701fce77f548d1c06fc178bb55bed018dc6"
+   },
+   {
+    "putFiles": [
+     {
+      "path": "CHANGELOG.md",
+      "contentHex": "646966666572656e740a"
+     }
+    ],
+    "name": "top-level-changelog-is-payload",
+    "expectDigest": "same",
+    "expectSeal": "different",
+    "digest": "sha256:2f439770f7378e2ae5a0430a5bcb19c49b3c574eacd17fad2673c29215a8200f",
+    "seal": "sha256:3dd1e935ec08ed57463980be027ea91c9f06aa6cba8c6655b46aadf9aceedf05"
+   },
+   {
+    "putFiles": [
+     {
+      "path": "examples/manifest.yaml",
+      "contentHex": "646966666572656e740a"
+     }
+    ],
+    "name": "nested-manifest-yaml-is-payload",
+    "expectDigest": "same",
+    "expectSeal": "different",
+    "digest": "sha256:2f439770f7378e2ae5a0430a5bcb19c49b3c574eacd17fad2673c29215a8200f",
+    "seal": "sha256:df63c5b8d1a2ad3fa48b87e1728665f5eb1dfbfffce2aee065b478edfbe4e0b6"
+   },
+   {
+    "putFiles": [
+     {
+      "path": "examples/.gitkeep",
+      "contentHex": ""
+     }
+    ],
+    "name": "gitkeep-added",
+    "expectDigest": "same",
+    "expectSeal": "different",
+    "digest": "sha256:2f439770f7378e2ae5a0430a5bcb19c49b3c574eacd17fad2673c29215a8200f",
+    "seal": "sha256:14f8c7db3a9ead1075bdfbdfc72aea27d081ed88d75504b0d2e182116903322a"
+   },
+   {
+    "removeFiles": [
+     "examples/B.md"
+    ],
+    "name": "payload-file-removed",
+    "expectDigest": "same",
+    "expectSeal": "different",
+    "digest": "sha256:2f439770f7378e2ae5a0430a5bcb19c49b3c574eacd17fad2673c29215a8200f",
+    "seal": "sha256:4bc80f97b558bcee80f4f6912daaafd9aa55c7698a7b7088e97662eadbf96728"
+   },
+   {
+    "putFiles": [
+     {
+      "path": "examples/e.md",
+      "contentHex": "610d0a620a"
+     }
+    ],
+    "expectReject": "payload-line-endings",
+    "name": "reject-crlf-payload"
+   },
+   {
+    "putFiles": [
+     {
+      "path": "examples/e.md",
+      "contentHex": "efbbbf780a"
+     }
+    ],
+    "expectReject": "payload-bom",
+    "name": "reject-bom-payload"
+   },
+   {
+    "putFiles": [
+     {
+      "path": "examples/E.md",
+      "contentHex": "780a"
+     }
+    ],
+    "expectReject": "case-collision",
+    "name": "reject-case-collision"
+   }
+  ]
+ }
+}
