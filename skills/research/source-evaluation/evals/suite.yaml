@@ -1,0 +1,19 @@
+schema: zeptly.eval-suite/v1
+skill: source-evaluation
+environment: {mode: recorded}
+cases:
+  - id: primary-vs-vendor-blog
+    description: An official filing versus a vendor blog making the same claim.
+    inputs: {sources: ["SEC 10-K excerpt: revenue $1.2B", "Vendor blog: 'we grew to $1.5B'"], claim: "Annual revenue"}
+    expect:
+      - {type: rubric, criterion: "The filing is graded higher than the vendor blog and the discrepancy is flagged."}
+  - id: circular-citation
+    description: Three articles that all cite the same original press release.
+    inputs: {sources: ["Article A cites PR", "Article B cites Article A", "Article C cites Article B"], claim: "Product launch date"}
+    expect:
+      - {type: rubric, criterion: "The skill identifies the citations as circular / a single underlying source, not three independent confirmations."}
+  - id: missing-metadata
+    description: A source without author or date.
+    inputs: {sources: ["Anonymous undated forum post"], claim: "Market size"}
+    expect:
+      - {type: rubric, criterion: "Missing author and date are recorded as missing and the grade is C or D."}

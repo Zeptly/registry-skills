@@ -1,0 +1,113 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://registry.zeptly.dev/schemas/approval/v3.json",
+  "title": "Governed approval record (provenance/approval.yaml)",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "apiVersion",
+    "kind",
+    "subject",
+    "approvedBy",
+    "approvedAt",
+    "basis"
+  ],
+  "properties": {
+    "apiVersion": {
+      "const": "registry.zeptly.dev/v1alpha1"
+    },
+    "kind": {
+      "const": "Approval"
+    },
+    "subject": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "digest",
+        "digestAlgorithm",
+        "directorySeal",
+        "id",
+        "registry",
+        "version"
+      ],
+      "properties": {
+        "registry": {
+          "const": "skills"
+        },
+        "id": {
+          "type": "string",
+          "pattern": "^[a-z0-9]+([.-][a-z0-9]+)*$"
+        },
+        "version": {
+          "type": "string",
+          "pattern": "^\\d+\\.\\d+\\.\\d+(-[0-9A-Za-z.-]+)?$"
+        },
+        "digest": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        },
+        "digestAlgorithm": {
+          "const": "zeptly-jcs-v1"
+        },
+        "directorySeal": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        }
+      }
+    },
+    "approvedBy": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "string",
+        "pattern": "^@[A-Za-z0-9_/-]+$"
+      }
+    },
+    "securityReviewedBy": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "pattern": "^@[A-Za-z0-9_/-]+$"
+      }
+    },
+    "approvedAt": {
+      "type": "string",
+      "format": "date"
+    },
+    "basis": {
+      "enum": [
+        "evaluation",
+        "protocol-exception"
+      ]
+    },
+    "evaluationRef": {
+      "type": "string",
+      "description": "bundle:<path> of the evaluation report this approval relies on."
+    },
+    "notes": {
+      "type": "string"
+    },
+    "exception": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "rule",
+        "reason",
+        "expiresOnVersion"
+      ],
+      "description": "Explicit, temporary exception to a protocol rule. Expires when the artifact reaches expiresOnVersion; must be ratified or replaced by executed evaluations.",
+      "properties": {
+        "rule": {
+          "const": "promotion.required-evaluations"
+        },
+        "reason": {
+          "type": "string",
+          "minLength": 10
+        },
+        "expiresOnVersion": {
+          "type": "string"
+        }
+      }
+    }
+  }
+}

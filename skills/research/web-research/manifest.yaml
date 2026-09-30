@@ -1,0 +1,60 @@
+apiVersion: registry.zeptly.dev/v1alpha1
+kind: SkillBlueprint
+metadata:
+  id: web-research
+  version: 1.0.0
+  registry: skills
+  origin: {type: native}
+  maturity: canonical
+  lifecycle: active
+spec:
+  title: Web Research
+  description: Answer a research question by searching the web, reading primary sources, cross-checking claims and
+    returning a cited answer with stated confidence. Use when a question needs current or externally verifiable
+    information.
+  domain: research
+  tags: [research, citations, web]
+  stewardship:
+    maintainers: ['@Zeptly/registry-maintainers']
+  trust: {tier: first-party}
+  compatibility:
+    protocol: 1
+    agent_classes: [execution, qb, timesaver]
+    min_context_tokens: 16000
+  requires:
+    capabilities:
+    - {id: cap.web.search}
+    - {id: cap.web.fetch}
+  inputs:
+  - {name: question, type: string, description: The research question to answer.}
+  - {name: scope, type: string, required: false, description: 'Optional constraints: time window, geography, source
+      types.'}
+  outputs:
+  - {name: report, type: markdown, description: 'Cited answer with evidence table, gaps and confidence.'}
+  - {name: sources, type: array, description: URLs actually read and used.}
+  security_profile:
+    data_sensitivity: [public]
+    side_effects: read-external
+    permissions:
+    - {scope: 'web:public', access: read, reason: Search and fetch public web pages.}
+    external_systems:
+    - {name: Public web, kind: web}
+    network: {egress: open}
+    authentication: {required: false}
+    hitl: {required: false}
+  evaluation: {suite: evals/suite.yaml, min_pass_rate: 0.8}
+references: []
+provenance:
+  createdAt: '2026-09-29T00:00:00Z'
+  authors:
+  - {name: Zeptly, kind: organisation}
+  sourceRefs: []
+  transformations: []
+security:
+  classification: low
+  capabilities: [cap.web.search, cap.web.fetch]
+  approvals:
+  - {type: governance, ref: 'bundle:provenance/approval.yaml', subjectDigest: 'sha256:616f76fa25791e200c52d7798f24c23a27888943286443e726b70744ae79c698',
+    digestAlgorithm: zeptly-jcs-v1, subjectSeal: 'sha256:86744b44707848173ff07a5460a8053e8f635ae6468f0e2bf80b24eccea8f6dd',
+    issuedAt: '2026-09-29'}
+attestations: []

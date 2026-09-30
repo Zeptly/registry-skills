@@ -1,0 +1,11 @@
+apiVersion: registry.zeptly.dev/v1alpha1
+kind: Approval
+subject: {registry: skills, id: web-research, version: 1.0.0, digest: 'sha256:616f76fa25791e200c52d7798f24c23a27888943286443e726b70744ae79c698',
+  digestAlgorithm: zeptly-jcs-v1, directorySeal: 'sha256:86744b44707848173ff07a5460a8053e8f635ae6468f0e2bf80b24eccea8f6dd'}
+approvedBy: ['@Zeptly/registry-maintainers']
+approvedAt: '2026-09-29'
+basis: protocol-exception
+exception: {rule: promotion.required-evaluations, reason: Registry bootstrap seed skill; suite is structurally validated
+    but has not yet been executed by an eval harness., expiresOnVersion: 1.1.0}
+notes: Seed content authored with the registry baseline. Maintainers must ratify this record or replace it with
+  an eval-report approval.

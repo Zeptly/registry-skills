@@ -1,0 +1,318 @@
+{
+  "apiVersion": "registry.zeptly.dev/v1alpha1",
+  "kind": "RegistryIndex",
+  "registry": "skills",
+  "digestAlgorithm": "zeptly-jcs-v1",
+  "domain": "production",
+  "entries": [
+    {
+      "registry": "skills",
+      "kind": "SkillBlueprint",
+      "id": "code-review",
+      "version": "1.0.0",
+      "digest": "sha256:b2bd1e8956318e62c23886e3c012a93345f376c2dc3445ff2552e1c2d8cd5e87",
+      "digestAlgorithm": "zeptly-jcs-v1",
+      "maturity": "canonical",
+      "lifecycle": "active",
+      "origin": {
+        "type": "native"
+      },
+      "location": {
+        "path": "skills/engineering/code-review"
+      },
+      "domain": "production",
+      "extensions": {
+        "skills": {
+          "domain": "engineering",
+          "stage": null,
+          "evidenceLevel": "unevaluated",
+          "agentClasses": [
+            "execution",
+            "qb"
+          ],
+          "references": [],
+          "classification": "moderate",
+          "sideEffects": "read-external",
+          "hitlRequired": false,
+          "releasedVersions": [
+            {
+              "version": "1.0.0",
+              "digest": "sha256:b2bd1e8956318e62c23886e3c012a93345f376c2dc3445ff2552e1c2d8cd5e87",
+              "directorySeal": "sha256:013f4b48e345bb8d2cab75ec154e6ed378a5de577a10bb938738a3f3f66948ea",
+              "digestAlgorithm": "zeptly-jcs-v1",
+              "lifecycle": "active",
+              "tag": "skill/code-review/v1.0.0"
+            }
+          ]
+        }
+      },
+      "directorySeal": "sha256:013f4b48e345bb8d2cab75ec154e6ed378a5de577a10bb938738a3f3f66948ea"
+    },
+    {
+      "registry": "skills",
+      "kind": "SkillBlueprint",
+      "id": "competitive-intelligence",
+      "version": "1.0.0",
+      "digest": "sha256:48d2f447381022d72f403847fc4a15bc158e901eb2ab0c2bf8867002f8f2da3b",
+      "digestAlgorithm": "zeptly-jcs-v1",
+      "maturity": "canonical",
+      "lifecycle": "active",
+      "origin": {
+        "type": "native"
+      },
+      "location": {
+        "path": "skills/research/competitive-intelligence"
+      },
+      "domain": "production",
+      "extensions": {
+        "skills": {
+          "domain": "research",
+          "stage": null,
+          "evidenceLevel": "unevaluated",
+          "agentClasses": [
+            "execution",
+            "qb"
+          ],
+          "references": [
+            {
+              "registry": "skills",
+              "id": "web-research",
+              "version": "^1.0.0"
+            },
+            {
+              "registry": "skills",
+              "id": "source-evaluation",
+              "version": "^1.0.0"
+            },
+            {
+              "registry": "skills",
+              "id": "structured-comparison",
+              "version": "^1.0.0"
+            }
+          ],
+          "classification": "low",
+          "sideEffects": "read-external",
+          "hitlRequired": false,
+          "releasedVersions": [
+            {
+              "version": "1.0.0",
+              "digest": "sha256:48d2f447381022d72f403847fc4a15bc158e901eb2ab0c2bf8867002f8f2da3b",
+              "directorySeal": "sha256:66309224502acc5e91b064ce769cb1d35cb7439c6d5ed49104bb73af09d734f0",
+              "digestAlgorithm": "zeptly-jcs-v1",
+              "lifecycle": "active",
+              "tag": "skill/competitive-intelligence/v1.0.0"
+            }
+          ]
+        }
+      },
+      "directorySeal": "sha256:66309224502acc5e91b064ce769cb1d35cb7439c6d5ed49104bb73af09d734f0"
+    },
+    {
+      "registry": "skills",
+      "kind": "SkillBlueprint",
+      "id": "github-pr-triage",
+      "version": "0.1.0",
+      "digest": "sha256:3ee1f47475b2fed12dea7c25f7968f7020d5d86d0f92cef1ee36bef7a12b5cdf",
+      "digestAlgorithm": "zeptly-jcs-v1",
+      "maturity": "candidate",
+      "lifecycle": "active",
+      "origin": {
+        "type": "discovered"
+      },
+      "location": {
+        "path": "candidates/integrations/github-pr-triage"
+      },
+      "domain": "production",
+      "extensions": {
+        "skills": {
+          "domain": "integrations",
+          "stage": "inspected",
+          "evidenceLevel": "n/a",
+          "agentClasses": [
+            "execution"
+          ],
+          "references": [],
+          "classification": "moderate",
+          "sideEffects": "write-external",
+          "hitlRequired": true,
+          "releasedVersions": []
+        }
+      }
+    },
+    {
+      "registry": "skills",
+      "kind": "SkillBlueprint",
+      "id": "source-evaluation",
+      "version": "1.0.0",
+      "digest": "sha256:2317f2f814bbba17b6cac12ec6ada2c8bd132c723285856bb36b25e290f45861",
+      "digestAlgorithm": "zeptly-jcs-v1",
+      "maturity": "canonical",
+      "lifecycle": "active",
+      "origin": {
+        "type": "native"
+      },
+      "location": {
+        "path": "skills/research/source-evaluation"
+      },
+      "domain": "production",
+      "extensions": {
+        "skills": {
+          "domain": "research",
+          "stage": null,
+          "evidenceLevel": "unevaluated",
+          "agentClasses": [
+            "execution",
+            "qb",
+            "tiny",
+            "timesaver"
+          ],
+          "references": [],
+          "classification": "low",
+          "sideEffects": "none",
+          "hitlRequired": false,
+          "releasedVersions": [
+            {
+              "version": "1.0.0",
+              "digest": "sha256:2317f2f814bbba17b6cac12ec6ada2c8bd132c723285856bb36b25e290f45861",
+              "directorySeal": "sha256:c4ec4b34d42cf8446b61bdb53d3bb9f0c82deb32cd72bb9cfd1ae15bf846e907",
+              "digestAlgorithm": "zeptly-jcs-v1",
+              "lifecycle": "active",
+              "tag": "skill/source-evaluation/v1.0.0"
+            }
+          ]
+        }
+      },
+      "directorySeal": "sha256:c4ec4b34d42cf8446b61bdb53d3bb9f0c82deb32cd72bb9cfd1ae15bf846e907"
+    },
+    {
+      "registry": "skills",
+      "kind": "SkillBlueprint",
+      "id": "structured-comparison",
+      "version": "1.0.0",
+      "digest": "sha256:b1d23483900c4c5777ecb63680b140389f68a37f5dd2744d75c32f880face0e6",
+      "digestAlgorithm": "zeptly-jcs-v1",
+      "maturity": "canonical",
+      "lifecycle": "active",
+      "origin": {
+        "type": "native"
+      },
+      "location": {
+        "path": "skills/analysis/structured-comparison"
+      },
+      "domain": "production",
+      "extensions": {
+        "skills": {
+          "domain": "analysis",
+          "stage": null,
+          "evidenceLevel": "unevaluated",
+          "agentClasses": [
+            "any"
+          ],
+          "references": [],
+          "classification": "low",
+          "sideEffects": "none",
+          "hitlRequired": false,
+          "releasedVersions": [
+            {
+              "version": "1.0.0",
+              "digest": "sha256:b1d23483900c4c5777ecb63680b140389f68a37f5dd2744d75c32f880face0e6",
+              "directorySeal": "sha256:f88246d49b6cc5125ac3ae87c59c6b774c22a1d6bc0ae2395666feba07381508",
+              "digestAlgorithm": "zeptly-jcs-v1",
+              "lifecycle": "active",
+              "tag": "skill/structured-comparison/v1.0.0"
+            }
+          ]
+        }
+      },
+      "directorySeal": "sha256:f88246d49b6cc5125ac3ae87c59c6b774c22a1d6bc0ae2395666feba07381508"
+    },
+    {
+      "registry": "skills",
+      "kind": "SkillBlueprint",
+      "id": "structured-data-extraction",
+      "version": "1.0.0",
+      "digest": "sha256:72048153599a3d9857662c9178b6f6a9f3b2a1217e416d1799c965cd7ddee082",
+      "digestAlgorithm": "zeptly-jcs-v1",
+      "maturity": "canonical",
+      "lifecycle": "active",
+      "origin": {
+        "type": "native"
+      },
+      "location": {
+        "path": "skills/data/structured-data-extraction"
+      },
+      "domain": "production",
+      "extensions": {
+        "skills": {
+          "domain": "data",
+          "stage": null,
+          "evidenceLevel": "unevaluated",
+          "agentClasses": [
+            "execution",
+            "qb",
+            "timesaver"
+          ],
+          "references": [],
+          "classification": "moderate",
+          "sideEffects": "none",
+          "hitlRequired": false,
+          "releasedVersions": [
+            {
+              "version": "1.0.0",
+              "digest": "sha256:72048153599a3d9857662c9178b6f6a9f3b2a1217e416d1799c965cd7ddee082",
+              "directorySeal": "sha256:910aa9291e0884531ae30af33f219584df64eedbc3378bf888045227d4edb468",
+              "digestAlgorithm": "zeptly-jcs-v1",
+              "lifecycle": "active",
+              "tag": "skill/structured-data-extraction/v1.0.0"
+            }
+          ]
+        }
+      },
+      "directorySeal": "sha256:910aa9291e0884531ae30af33f219584df64eedbc3378bf888045227d4edb468"
+    },
+    {
+      "registry": "skills",
+      "kind": "SkillBlueprint",
+      "id": "web-research",
+      "version": "1.0.0",
+      "digest": "sha256:616f76fa25791e200c52d7798f24c23a27888943286443e726b70744ae79c698",
+      "digestAlgorithm": "zeptly-jcs-v1",
+      "maturity": "canonical",
+      "lifecycle": "active",
+      "origin": {
+        "type": "native"
+      },
+      "location": {
+        "path": "skills/research/web-research"
+      },
+      "domain": "production",
+      "extensions": {
+        "skills": {
+          "domain": "research",
+          "stage": null,
+          "evidenceLevel": "unevaluated",
+          "agentClasses": [
+            "execution",
+            "qb",
+            "timesaver"
+          ],
+          "references": [],
+          "classification": "low",
+          "sideEffects": "read-external",
+          "hitlRequired": false,
+          "releasedVersions": [
+            {
+              "version": "1.0.0",
+              "digest": "sha256:616f76fa25791e200c52d7798f24c23a27888943286443e726b70744ae79c698",
+              "directorySeal": "sha256:86744b44707848173ff07a5460a8053e8f635ae6468f0e2bf80b24eccea8f6dd",
+              "digestAlgorithm": "zeptly-jcs-v1",
+              "lifecycle": "active",
+              "tag": "skill/web-research/v1.0.0"
+            }
+          ]
+        }
+      },
+      "directorySeal": "sha256:86744b44707848173ff07a5460a8053e8f635ae6468f0e2bf80b24eccea8f6dd"
+    }
+  ]
+}

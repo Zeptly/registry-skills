@@ -1,0 +1,265 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://registry.zeptly.dev/schemas/runtime-lock/v1alpha1.json",
+  "title": "RuntimeLock (Protocol v0.2): every declared reference appears; complete is true only when all are resolved",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "apiVersion",
+    "kind",
+    "digestAlgorithm",
+    "domain",
+    "subject",
+    "complete",
+    "entries"
+  ],
+  "properties": {
+    "apiVersion": {
+      "const": "registry.zeptly.dev/v1alpha1"
+    },
+    "kind": {
+      "const": "RuntimeLock"
+    },
+    "digestAlgorithm": {
+      "const": "zeptly-jcs-v1"
+    },
+    "domain": {
+      "enum": [
+        "production",
+        "synthetic"
+      ]
+    },
+    "subject": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "registry",
+        "id",
+        "version",
+        "digest"
+      ],
+      "properties": {
+        "registry": {
+          "type": "string"
+        },
+        "id": {
+          "type": "string"
+        },
+        "version": {
+          "type": "string"
+        },
+        "digest": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        }
+      }
+    },
+    "complete": {
+      "type": "boolean"
+    },
+    "entries": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "requested",
+          "status"
+        ],
+        "properties": {
+          "requested": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "registry",
+              "id",
+              "version"
+            ],
+            "properties": {
+              "registry": {
+                "type": "string"
+              },
+              "id": {
+                "type": "string"
+              },
+              "version": {
+                "type": "string"
+              },
+              "digest": {
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "pattern": "^sha256:[0-9a-f]{64}$"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "digestAlgorithm": {
+                "const": "zeptly-jcs-v1"
+              }
+            }
+          },
+          "status": {
+            "enum": [
+              "resolved",
+              "unresolved"
+            ]
+          },
+          "resolved": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "registry",
+              "id",
+              "version",
+              "digest",
+              "digestAlgorithm",
+              "maturity",
+              "lifecycle",
+              "domain"
+            ],
+            "properties": {
+              "registry": {
+                "type": "string"
+              },
+              "id": {
+                "type": "string"
+              },
+              "version": {
+                "type": "string"
+              },
+              "digest": {
+                "type": "string",
+                "pattern": "^sha256:[0-9a-f]{64}$"
+              },
+              "digestAlgorithm": {
+                "const": "zeptly-jcs-v1"
+              },
+              "directorySeal": {
+                "type": "string",
+                "pattern": "^sha256:[0-9a-f]{64}$"
+              },
+              "maturity": {
+                "enum": [
+                  "candidate",
+                  "canonical"
+                ]
+              },
+              "lifecycle": {
+                "enum": [
+                  "active",
+                  "deprecated",
+                  "revoked"
+                ]
+              },
+              "domain": {
+                "enum": [
+                  "production",
+                  "synthetic"
+                ]
+              }
+            }
+          },
+          "unresolved": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "code",
+              "message"
+            ],
+            "properties": {
+              "code": {
+                "enum": [
+                  "no-peer-index",
+                  "not-found",
+                  "no-matching-version",
+                  "revoked",
+                  "deprecated-requires-exact-pin",
+                  "candidate-not-allowed",
+                  "digest-mismatch",
+                  "invalid-range",
+                  "domain-mismatch"
+                ]
+              },
+              "message": {
+                "type": "string",
+                "minLength": 1
+              }
+            }
+          }
+        },
+        "allOf": [
+          {
+            "if": {
+              "properties": {
+                "status": {
+                  "const": "resolved"
+                }
+              },
+              "required": [
+                "status"
+              ]
+            },
+            "then": {
+              "required": [
+                "resolved"
+              ],
+              "not": {
+                "required": [
+                  "unresolved"
+                ]
+              }
+            }
+          },
+          {
+            "if": {
+              "properties": {
+                "status": {
+                  "const": "unresolved"
+                }
+              },
+              "required": [
+                "status"
+              ]
+            },
+            "then": {
+              "required": [
+                "unresolved"
+              ],
+              "not": {
+                "required": [
+                  "resolved"
+                ]
+              }
+            }
+          }
+        ]
+      }
+    }
+  },
+  "if": {
+    "properties": {
+      "complete": {
+        "const": true
+      }
+    },
+    "required": [
+      "complete"
+    ]
+  },
+  "then": {
+    "properties": {
+      "entries": {
+        "items": {
+          "properties": {
+            "status": {
+              "const": "resolved"
+            }
+          }
+        }
+      }
+    }
+  }
+}

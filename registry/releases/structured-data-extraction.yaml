@@ -1,0 +1,11 @@
+schema: zeptly.ledger/v1
+registry: skills
+digestAlgorithm: zeptly-jcs-v1
+skill: structured-data-extraction
+releases:
+- version: 1.0.0
+  digest: sha256:72048153599a3d9857662c9178b6f6a9f3b2a1217e416d1799c965cd7ddee082
+  directory_seal: sha256:910aa9291e0884531ae30af33f219584df64eedbc3378bf888045227d4edb468
+  contract_digest: sha256:703cee1751cb26f76903ea68e9ddfa1b64d8b52a0d4e9bb082c11f8d8f545098
+  security_digest: sha256:ec554e8f65f1d7e880953bc40bd9691bb011accb025c49ef55133e0598e5046b
+  released_at: '2026-09-30'

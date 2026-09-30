@@ -1,0 +1,23 @@
+name: Skill proposal
+description: Propose a new skill, or an improvement to an existing one
+labels: [skill-proposal]
+body:
+  - type: dropdown
+    id: source
+    attributes:
+      label: Where does this come from?
+      options: [Human best practice, Execution evidence (compute), External capability (MCP/API/tool), Other]
+    validations: {required: true}
+  - type: input
+    id: skill
+    attributes: {label: "Existing skill ID (if improving one)", placeholder: web-research}
+  - type: textarea
+    id: problem
+    attributes: {label: What procedure or failure does this address?}
+    validations: {required: true}
+  - type: textarea
+    id: evidence
+    attributes: {label: Evidence (links, run IDs, sources). Do not paste credentials or personal data.}
+  - type: textarea
+    id: risk
+    attributes: {label: Systems touched, side effects, data sensitivity, authentication needs}

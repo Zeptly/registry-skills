@@ -1,0 +1,64 @@
+apiVersion: registry.zeptly.dev/v1alpha1
+kind: SkillBlueprint
+metadata:
+  id: code-review
+  version: 1.0.0
+  registry: skills
+  origin: {type: native}
+  maturity: canonical
+  lifecycle: active
+spec:
+  title: Code Review
+  description: Review a code change (diff or pull request) for correctness, security, maintainability and test adequacy,
+    returning prioritised, evidence-backed findings. Use when asked to review a PR, patch or branch.
+  domain: engineering
+  tags: [engineering, review, security]
+  stewardship:
+    maintainers: ['@Zeptly/registry-maintainers']
+  trust: {tier: first-party}
+  compatibility:
+    protocol: 1
+    agent_classes: [execution, qb]
+    min_context_tokens: 32000
+  requires:
+    capabilities:
+    - {id: cap.code.read}
+    - {id: cap.vcs.read}
+    tools:
+    - {kind: mcp, name: github, server: github-mcp-server, optional: true}
+  inputs:
+  - {name: change, type: string, description: 'Diff text, PR URL, or branch/commit range to review.'}
+  - {name: focus, type: string, required: false, description: 'Optional emphasis, e.g. security or performance.'}
+  outputs:
+  - {name: review, type: markdown, description: 'Verdict and prioritised findings with file:line evidence.'}
+  security_profile:
+    data_sensitivity: [confidential]
+    side_effects: read-external
+    permissions:
+    - {scope: 'vcs:repo', access: read, reason: 'Read the diff, files and PR metadata under review.'}
+    external_systems:
+    - {name: Source-control host, kind: saas}
+    network:
+      egress: allowlist
+      allowed_domains: [github.com, api.github.com]
+    authentication:
+      required: true
+      methods: [oauth, user-delegated]
+      credential_handling: runtime-injected
+    hitl: {required: false}
+  evaluation: {suite: evals/suite.yaml, min_pass_rate: 0.8}
+references: []
+provenance:
+  createdAt: '2026-09-29T00:00:00Z'
+  authors:
+  - {name: Zeptly, kind: organisation}
+  sourceRefs: []
+  transformations: []
+security:
+  classification: moderate
+  capabilities: [cap.code.read, cap.vcs.read]
+  approvals:
+  - {type: governance, ref: 'bundle:provenance/approval.yaml', subjectDigest: 'sha256:b2bd1e8956318e62c23886e3c012a93345f376c2dc3445ff2552e1c2d8cd5e87',
+    digestAlgorithm: zeptly-jcs-v1, subjectSeal: 'sha256:013f4b48e345bb8d2cab75ec154e6ed378a5de577a10bb938738a3f3f66948ea',
+    issuedAt: '2026-09-29'}
+attestations: []

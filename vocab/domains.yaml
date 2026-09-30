@@ -1,0 +1,11 @@
+# Controlled vocabulary of skill domains. A domain is a *classification*, not an
+# identity: skill IDs never contain the domain, so a skill can be re-filed
+# without breaking references. Add a domain via PR (CODEOWNERS: registry maintainers).
+domains:
+  research:     {description: "Finding, evaluating and synthesising information from external sources."}
+  engineering:  {description: "Software engineering procedures: review, debugging, testing, release."}
+  data:         {description: "Data extraction, transformation and structured-output procedures."}
+  analysis:     {description: "Analytical and comparative reasoning over already-gathered material."}
+  integrations: {description: "Procedures bound to a specific external platform, API or MCP server."}
+  writing:      {description: "Structured writing and editing procedures."}
+  operations:   {description: "Business/ops procedures (finance, SEO, support, etc.)."}

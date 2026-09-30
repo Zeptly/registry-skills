@@ -1,0 +1,24 @@
+schema: zeptly.assessment/v1
+subject:
+  kind: mcp-server
+  name: GitHub MCP Server
+  uri: https://github.com/github/github-mcp-server
+  license: MIT
+inspected_at: 2026-09-29
+inspected_by: ["registry baseline author (illustrative record)"]
+findings:
+  maintainer_reputation: Published by the GitHub organisation.
+  license: MIT (to be re-verified against the pinned release).
+  capabilities_observed: [list and read PRs/issues, create comments, manage labels and reviewers, merge PRs]
+  auth_model: OAuth or personal access token supplied by the runtime; scopes determine reach.
+  data_exposure: Repository metadata and code visible to the token; may include private repositories.
+  side_effects: Server exposes write and destructive tools (merge, delete); the skill must restrict itself to a safe subset.
+  prompt_injection_surface: PR titles, bodies, comments and file contents are attacker-controllable text entering agent context.
+  supply_chain: Not yet assessed; no release ref or digest pinned.
+  open_risks:
+    - "ILLUSTRATIVE RECORD: this demonstrates the inspection stage; no pinned release was inspected."
+    - Tool allowlist restricting the runtime to non-destructive tools has not been designed.
+    - Least-privilege token scopes not yet defined.
+verdict: needs-more-inspection
+restrictions:
+  - Must be re-inspected against a pinned release before advancing to 'candidate'.

@@ -1,0 +1,64 @@
+apiVersion: registry.zeptly.dev/v1alpha1
+kind: SkillBlueprint
+metadata:
+  id: github-pr-triage
+  version: 0.1.0
+  registry: skills
+  origin: {type: discovered}
+  maturity: candidate
+  lifecycle: active
+spec:
+  title: GitHub PR Triage
+  description: Triage open pull requests by classifying, prioritising and proposing labels and reviewer assignments,
+    applying changes only after human confirmation. Use when a maintainer wants a repository's PR queue sorted.
+  domain: integrations
+  tags: [github, mcp, triage]
+  stewardship:
+    maintainers: ['@Zeptly/registry-maintainers']
+  trust: {tier: unreviewed, assessment: provenance/assessment.yaml}
+  compatibility:
+    protocol: 1
+    agent_classes: [execution]
+  requires:
+    capabilities:
+    - {id: cap.vcs.read}
+    - {id: cap.vcs.write}
+    - {id: cap.human.confirm}
+    tools:
+    - {kind: mcp, name: github, server: github-mcp-server}
+  inputs:
+  - {name: repository, type: string, description: owner/repo to triage.}
+  outputs:
+  - {name: triage, type: markdown, description: Triage table with proposed and applied changes.}
+  security_profile:
+    data_sensitivity: [confidential]
+    side_effects: write-external
+    permissions:
+    - {scope: 'vcs:repo', access: read, reason: List pull requests and their review/CI state.}
+    - {scope: 'vcs:repo', access: write, reason: 'Apply confirmed labels, reviewer requests and comments.'}
+    external_systems:
+    - {name: GitHub, kind: mcp}
+    network:
+      egress: allowlist
+      allowed_domains: [github.com, api.github.com]
+    authentication:
+      required: true
+      methods: [oauth, user-delegated]
+      credential_handling: runtime-injected
+    hitl:
+      required: true
+      triggers: [any label change, any reviewer request, any comment, any state change]
+  evaluation: {suite: evals/suite.yaml, min_pass_rate: 0.9}
+references: []
+provenance:
+  createdAt: '2026-09-29T00:00:00Z'
+  authors:
+  - {name: Zeptly registry maintainers, kind: human}
+  sourceRefs:
+  - {kind: mcp-server, uri: 'https://github.com/github/github-mcp-server', retrievedAt: '2026-09-29'}
+  transformations: []
+security:
+  classification: moderate
+  capabilities: [cap.vcs.read, cap.vcs.write, cap.human.confirm]
+  approvals: []
+attestations: []

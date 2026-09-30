@@ -1,0 +1,51 @@
+apiVersion: registry.zeptly.dev/v1alpha1
+kind: SkillBlueprint
+metadata:
+  id: source-evaluation
+  version: 1.0.0
+  registry: skills
+  origin: {type: native}
+  maturity: canonical
+  lifecycle: active
+spec:
+  title: Source Evaluation
+  description: Assess the reliability of one or more information sources (provenance, independence, recency, bias,
+    corroboration) and grade how far each may be relied upon. Use before citing or building conclusions on supplied
+    or discovered sources.
+  domain: research
+  tags: [research, credibility]
+  stewardship:
+    maintainers: ['@Zeptly/registry-maintainers']
+  trust: {tier: first-party}
+  compatibility:
+    protocol: 1
+    agent_classes: [execution, qb, tiny, timesaver]
+  requires:
+    capabilities: []
+  inputs:
+  - {name: sources, type: array, description: 'Sources to evaluate (URLs, excerpts or documents) with the claim
+      each supports.'}
+  outputs:
+  - {name: assessment, type: markdown, description: Per-source grades with reasons and corroboration recommendations.}
+  security_profile:
+    data_sensitivity: [public]
+    side_effects: none
+    permissions: []
+    authentication: {required: false}
+    hitl: {required: false}
+  evaluation: {suite: evals/suite.yaml, min_pass_rate: 0.8}
+references: []
+provenance:
+  createdAt: '2026-09-29T00:00:00Z'
+  authors:
+  - {name: Zeptly, kind: organisation}
+  sourceRefs: []
+  transformations: []
+security:
+  classification: low
+  capabilities: []
+  approvals:
+  - {type: governance, ref: 'bundle:provenance/approval.yaml', subjectDigest: 'sha256:2317f2f814bbba17b6cac12ec6ada2c8bd132c723285856bb36b25e290f45861',
+    digestAlgorithm: zeptly-jcs-v1, subjectSeal: 'sha256:c4ec4b34d42cf8446b61bdb53d3bb9f0c82deb32cd72bb9cfd1ae15bf846e907',
+    issuedAt: '2026-09-29'}
+attestations: []

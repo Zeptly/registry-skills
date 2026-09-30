@@ -1,0 +1,8 @@
+# Compatible-agent classes. Each class corresponds to a consuming registry/runtime.
+# Skills declare which classes they are written for; consumers filter on this.
+agent_classes:
+  execution: {registry: "Zeptly/registry-execution-agents", description: "Full-capability execution agents with rich tool access."}
+  qb:        {registry: "Zeptly/registry-qb-agents",        description: "QB agents."}
+  tiny:      {registry: "Zeptly/registry-tiny-agents",      description: "Small-context / small-model agents. Skills must be compact."}
+  timesaver: {registry: null,                                description: "Timesavers, via their separate runtime architecture."}
+  any:       {registry: null,                                description: "Wildcard: procedure is agent-agnostic."}

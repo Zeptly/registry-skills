@@ -1,0 +1,130 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://registry.zeptly.dev/schemas/assessment/v1.json",
+  "title": "Provenance / security assessment (provenance/assessment.yaml)",
+  "description": "Record of inspecting an externally discovered capability before it may become a candidate. Discovery never implies production access.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "subject",
+    "inspected_at",
+    "inspected_by",
+    "findings",
+    "verdict"
+  ],
+  "properties": {
+    "schema": {
+      "const": "zeptly.assessment/v1"
+    },
+    "subject": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "kind",
+        "name",
+        "uri"
+      ],
+      "properties": {
+        "kind": {
+          "enum": [
+            "mcp-server",
+            "api",
+            "platform",
+            "model",
+            "open-source-tool",
+            "computer-use-interface",
+            "agent-framework",
+            "human-practice"
+          ]
+        },
+        "name": {
+          "type": "string"
+        },
+        "uri": {
+          "type": "string"
+        },
+        "pinned_ref": {
+          "type": "string"
+        },
+        "license": {
+          "type": "string"
+        }
+      }
+    },
+    "inspected_at": {
+      "type": "string",
+      "format": "date"
+    },
+    "inspected_by": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "string"
+      }
+    },
+    "findings": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "maintainer_reputation",
+        "license",
+        "capabilities_observed",
+        "auth_model",
+        "data_exposure",
+        "side_effects",
+        "prompt_injection_surface"
+      ],
+      "properties": {
+        "maintainer_reputation": {
+          "type": "string"
+        },
+        "license": {
+          "type": "string"
+        },
+        "capabilities_observed": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "auth_model": {
+          "type": "string"
+        },
+        "data_exposure": {
+          "type": "string"
+        },
+        "side_effects": {
+          "type": "string"
+        },
+        "prompt_injection_surface": {
+          "type": "string",
+          "description": "Where untrusted content enters the agent's context."
+        },
+        "supply_chain": {
+          "type": "string"
+        },
+        "open_risks": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "verdict": {
+      "enum": [
+        "proceed-to-candidate",
+        "proceed-with-restrictions",
+        "reject",
+        "needs-more-inspection"
+      ]
+    },
+    "restrictions": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    }
+  }
+}

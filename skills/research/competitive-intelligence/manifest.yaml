@@ -1,0 +1,64 @@
+apiVersion: registry.zeptly.dev/v1alpha1
+kind: SkillBlueprint
+metadata:
+  id: competitive-intelligence
+  version: 1.0.0
+  registry: skills
+  origin: {type: native}
+  maturity: canonical
+  lifecycle: active
+spec:
+  title: Competitive Intelligence
+  description: Build a sourced competitive landscape for a company or product by composing web research, source
+    evaluation and structured comparison. Use when asked who the competitors are and how they compare.
+  domain: research
+  tags: [research, competitors, composite]
+  stewardship:
+    maintainers: ['@Zeptly/registry-maintainers']
+  trust: {tier: first-party}
+  compatibility:
+    protocol: 1
+    agent_classes: [execution, qb]
+    min_context_tokens: 32000
+  requires:
+    capabilities:
+    - {id: cap.web.search}
+    - {id: cap.web.fetch}
+  composition:
+  - {id: web-research, role: composes}
+  - {id: source-evaluation, role: composes}
+  - {id: structured-comparison, role: composes}
+  inputs:
+  - {name: subject, type: string, description: Company or product to analyse.}
+  - {name: segment, type: string, required: false, description: Market segment or use case to focus on.}
+  outputs:
+  - {name: landscape, type: markdown, description: 'Competitor list, comparison matrix, insights and graded sources.'}
+  security_profile:
+    data_sensitivity: [public]
+    side_effects: read-external
+    permissions:
+    - {scope: 'web:public', access: read, reason: Inherited from composed web-research.}
+    external_systems:
+    - {name: Public web, kind: web}
+    network: {egress: open}
+    authentication: {required: false}
+    hitl: {required: false}
+  evaluation: {suite: evals/suite.yaml, min_pass_rate: 0.8}
+references:
+- {registry: skills, id: web-research, version: ^1.0.0, digest: null}
+- {registry: skills, id: source-evaluation, version: ^1.0.0, digest: null}
+- {registry: skills, id: structured-comparison, version: ^1.0.0, digest: null}
+provenance:
+  createdAt: '2026-09-29T00:00:00Z'
+  authors:
+  - {name: Zeptly, kind: organisation}
+  sourceRefs: []
+  transformations: []
+security:
+  classification: low
+  capabilities: [cap.web.search, cap.web.fetch]
+  approvals:
+  - {type: governance, ref: 'bundle:provenance/approval.yaml', subjectDigest: 'sha256:48d2f447381022d72f403847fc4a15bc158e901eb2ab0c2bf8867002f8f2da3b',
+    digestAlgorithm: zeptly-jcs-v1, subjectSeal: 'sha256:66309224502acc5e91b064ce769cb1d35cb7439c6d5ed49104bb73af09d734f0',
+    issuedAt: '2026-09-29'}
+attestations: []

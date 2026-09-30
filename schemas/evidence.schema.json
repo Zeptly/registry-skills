@@ -1,0 +1,158 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://registry.zeptly.dev/schemas/evidence-refs/v1.json",
+  "title": "Evidence reference file (provenance/evidence.yaml)",
+  "description": "Append-only POINTERS to evidence about a skill. No tapes, trajectories or payloads are ever embedded or committed; the Evidence Protocol itself is out of scope (deferred in Registry Protocol v0.1).",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "apiVersion",
+    "kind",
+    "subject",
+    "refs"
+  ],
+  "properties": {
+    "apiVersion": {
+      "const": "registry.zeptly.dev/v1alpha1"
+    },
+    "kind": {
+      "const": "EvidenceReferences"
+    },
+    "subject": {
+      "description": "Skill identity (digest not required: entries pin their own subject).",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "registry",
+        "id"
+      ],
+      "properties": {
+        "registry": {
+          "const": "skills"
+        },
+        "id": {
+          "type": "string",
+          "pattern": "^[a-z0-9]+([.-][a-z0-9]+)*$"
+        }
+      }
+    },
+    "refs": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "evidenceId",
+          "wisdom",
+          "kind",
+          "subject",
+          "uri",
+          "recordedAt",
+          "summary"
+        ],
+        "properties": {
+          "evidenceId": {
+            "type": "string",
+            "pattern": "^ev-[a-z0-9][a-z0-9-]{2,63}$"
+          },
+          "wisdom": {
+            "enum": [
+              "crowd",
+              "compute"
+            ]
+          },
+          "kind": {
+            "enum": [
+              "execution-summary",
+              "failure-cluster",
+              "eval-result",
+              "human-correction",
+              "human-preference",
+              "best-practice",
+              "cost-latency-report",
+              "incident"
+            ]
+          },
+          "subject": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "digest",
+              "digestAlgorithm",
+              "id",
+              "registry",
+              "version"
+            ],
+            "properties": {
+              "registry": {
+                "const": "skills"
+              },
+              "id": {
+                "type": "string",
+                "pattern": "^[a-z0-9]+([.-][a-z0-9]+)*$"
+              },
+              "version": {
+                "type": "string",
+                "pattern": "^\\d+\\.\\d+\\.\\d+(-[0-9A-Za-z.-]+)?$"
+              },
+              "digest": {
+                "type": "string",
+                "pattern": "^sha256:[0-9a-f]{64}$"
+              },
+              "digestAlgorithm": {
+                "const": "zeptly-jcs-v1"
+              }
+            }
+          },
+          "uri": {
+            "type": "string",
+            "pattern": "^(evidence://|https://)[^\\s]+$",
+            "description": "Opaque pointer into the evidence system. Never file:, data: or inline content."
+          },
+          "contentDigest": {
+            "type": "string",
+            "pattern": "^sha256:[0-9a-f]{64}$"
+          },
+          "recordedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "summary": {
+            "type": "string",
+            "minLength": 5,
+            "maxLength": 500
+          },
+          "supports": {
+            "enum": [
+              "improvement",
+              "regression",
+              "failure-pattern",
+              "confirmation",
+              "new-skill"
+            ]
+          },
+          "metrics": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "number"
+            }
+          },
+          "agentClassesObserved": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "nAgents": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "nRuns": {
+            "type": "integer",
+            "minimum": 1
+          }
+        }
+      }
+    }
+  }
+}

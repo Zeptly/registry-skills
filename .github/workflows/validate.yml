@@ -1,0 +1,46 @@
+name: validate
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: pyproject.toml
+      - run: pip install -e '.[dev]'
+      - name: Validate registry (schemas, lifecycle, security, dependencies, ledger)
+        run: zskill validate
+      - name: Index is current
+        run: zskill index --check
+      - name: Release ledgers are append-only
+        if: github.event_name == 'pull_request'
+        run: |
+          git fetch origin "${{ github.base_ref }}" --depth=1
+          zskill ledger-check --base "origin/${{ github.base_ref }}"
+      - name: Digest-contract vectors are current and pass the independent reference implementation
+        run: |
+          python tests/vectors/make_vectors.py --check
+          python tests/vectors/reference_zeptly_jcs_v1.py tests/vectors/zeptly-jcs-v1.skills-generated.json
+      - name: Runtime lock validates against its schema
+        run: |
+          zskill resolve competitive-intelligence > /tmp/lock.json
+          python -c "import json,jsonschema; jsonschema.Draft202012Validator(json.load(open('schemas/runtime-lock.schema.json'))).validate(json.load(open('/tmp/lock.json')))"
+      - name: Tooling tests
+        run: pytest -q
+      - name: Surface temporary protocol exceptions
+        if: always()
+        run: |
+          zskill validate 2>&1 | grep 'protocol-exception\]' | sed 's/^/::warning::/' || true

@@ -1,0 +1,10 @@
+# Registry maintainers own the protocol and the trust ledger.
+*                               @Zeptly/registry-maintainers
+/schemas/                       @Zeptly/registry-maintainers
+/vocab/                         @Zeptly/registry-maintainers
+/tools/                         @Zeptly/registry-maintainers
+/registry/                      @Zeptly/registry-maintainers
+/.github/                       @Zeptly/registry-maintainers
+# Approvals and assessments are decisions; security blocks are reviewed by the same team.
+/skills/**/provenance/approval.yaml    @Zeptly/registry-maintainers
+/candidates/**/provenance/             @Zeptly/registry-maintainers
