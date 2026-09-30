@@ -52,7 +52,7 @@ See README. Design notes:
 | Timesavers (separate runtime) | Stable IDs, no path coupling | `id`, index, digests |
 | runtime-trigger | Resolve a skill to a pinned version | `zskill resolve`, index `released_versions` |
 | Zep | Read evidence, propose candidates safely | Evidence schema, candidate tier, PR-only writes, no direct canonical write |
-| AgentGit / any evidence store | Reference exact skill used | `skill_ref` + `skill_digest` in evidence; opaque `uri` back |
+| AgentGit / any evidence store | Reference exact skill used | structured `subject {registry, id, version, digest}` in evidence; opaque `evidence://` `uri` back |
 
 **Direction of dependency:** consumers depend on this registry; this registry depends on none of them. Agent-class names are strings in a vocabulary file, not imports. There are no circular dependencies: the only inputs are PRs and evidence *pointers*.
 

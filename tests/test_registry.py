@@ -778,12 +778,12 @@ def test_allow_list_accepts_listed_paths(reg, rel):
     assert "file-not-allowed" not in codes(reg)
 
 
-def test_symlinks_rejected_and_never_followed(reg):
-    d0 = next(b for b in Registry(reg).bundles if b.rel == WR).digest()
+def test_symlinks_rejected_and_never_hashed(reg):
+    """Symlinks are an explicit error (see tests/test_remediation.py for seal/digest refusal)."""
     (reg / WR / "examples/link.md").symlink_to("/etc/hostname")
     (reg / WR / "examples/dirlink").symlink_to("/etc")
-    assert "symlink" in codes(reg)
-    assert next(b for b in Registry(reg).bundles if b.rel == WR).digest() == d0   # target bytes never hashed
+    found = [i.where for i in Registry(reg).run() if i.code == "symlink"]
+    assert sorted(found) == [WR + "/examples/dirlink", WR + "/examples/link.md"]
 
 
 def test_size_limits(reg):

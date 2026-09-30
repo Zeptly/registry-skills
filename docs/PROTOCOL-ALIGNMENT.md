@@ -59,3 +59,7 @@ Applied after the cross-registry audit. The shared canonicalization text itself 
 | Bundle contents | Explicit filename allow-list, symlinks rejected and never followed, size/count limits, transcript/tape/trace detection by name and content. |
 | Seed waivers | **Decision: temporary protocol exception**, explicit `basis: protocol-exception`, rule id, expiry 1.1.0 (unchanged), CI warning + index `unevaluated`; reason text unchanged. Not silently retained: see LIFECYCLE.md. |
 | Ledger | Ledger entries regenerated at 1.0.0 (digest algorithm changed; nothing was ever published from `main`). Not permitted once anything is on `main`. |
+
+## Local defect remediation (registry-local only; no shared-contract change)
+
+Duplicate YAML keys are now rejected with file/key-path/line diagnostics; seal and digest computation refuse bundles containing symlinks or unsupported filesystem entries (hashes of valid bundles are unchanged, golden vectors unchanged); index generation fails instead of omitting invalid bundles; generated indexes and resolution locks are validated against their schemas before success; malformed input and canonicalization failures produce controlled `error:` diagnostics (exit 2). See SPECIFICATION.md section 11. One behaviour differs from the draft digest handoff (DIGEST-CONTRACT.md, gap G6): the seal function no longer silently skips symlinks; it refuses. That changes nothing for valid bundles.

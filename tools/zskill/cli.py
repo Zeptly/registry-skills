@@ -6,12 +6,27 @@ import json
 import sys
 from pathlib import Path
 
+import yaml
+
 from . import registry_ops as ops
-from .bundle import repo_root
+from .bundle import RegistryError, repo_root
 from .validate import Registry
 
 
 def main(argv=None) -> int:
+    """Entry point. Expected failures (malformed input, invalid bundles, unhashable content, output that does not
+    match its schema) are reported as `error: ...` on stderr with exit status 2 instead of a traceback."""
+    try:
+        return _main(argv)
+    except RegistryError as e:
+        print(f"error: {e}", file=sys.stderr)
+        return 2
+    except (OSError, UnicodeError, yaml.YAMLError) as e:
+        print(f"error: {type(e).__name__}: {e}", file=sys.stderr)
+        return 2
+
+
+def _main(argv=None) -> int:
     ap = argparse.ArgumentParser(prog="zskill", description="Zeptly Skills Registry tooling")
     sub = ap.add_subparsers(dest="cmd", required=True)
 
@@ -78,8 +93,8 @@ def main(argv=None) -> int:
         rc = 0
         for ns in ("production", "synthetic"):
             target = ops.index_path(root, ns)
-            text = ops.index_text(root, ns)
-            empty = not ops.index(root, ns)["entries"]
+            text = ops.index_text(root, ns)            # raises RegistryError on invalid bundles / schema mismatch
+            empty = not json.loads(text)["entries"]
             if a.check:
                 if empty and not target.exists():
                     continue

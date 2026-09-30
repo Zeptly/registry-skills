@@ -4,10 +4,10 @@ Baseline choices were made to keep the protocol usable; these need owner input.
 
 | # | Decision | Baseline chosen | Question |
 |---|---|---|---|
-| 1 | **ID scheme** | `zsk.<slug>` (flat namespace) | Need org/publisher namespaces for third-party contributions (`zsk.<org>.<slug>`)? |
-| 2 | **Evidence URI scheme** | Opaque `scheme:` pointer | Agree canonical schemes (`agentgit://`, `zep://`) and namespacing of AgentGit integer IDs. |
+| 1 | **ID scheme** | Shared grammar `^[a-z0-9]+([.-][a-z0-9]+)*$`, no prefix; `registry: skills` disambiguates | Need org/publisher namespaces for third-party contributions? |
+| 2 | **Evidence URI scheme** | Pointers are `evidence://` or `https://` only (`file:`/`data:` rejected); Evidence Protocol deferred | Agree canonical evidence-store schemes and namespacing of AgentGit integer IDs. |
 | 3 | **Eval harness** | Schemas + gates only | Who owns the runner? Where do reports run (per agent class)? Grader trust (LLM-as-judge calibration). |
-| 4 | **Seed skills approved by waiver** | Time-boxed waiver, warns in CI | Ratify or replace with executed evals before 1.1.0. Waiver approver is a placeholder team handle. |
+| 4 | **Seed skills canonical by temporary protocol exception** | Explicit `basis: protocol-exception`, expiry at version 1.1.0 (a version threshold, not a calendar deadline), CI warning | Ratify or replace with executed evals before 1.1.0. The approver is a placeholder team handle. |
 | 5 | **Capability vocabulary** | Small starter set | Governance for growth; mapping to each runtime's actual tools. |
 | 6 | **Agent-class governance** | Five classes | Should classes have capability profiles (e.g. `tiny` = no `cap.web.fetch`)? |
 | 7 | **Signing** | Content digests only | Sign release tags / ledger entries (sigstore/gitsign)? Required for third-party trust tiers. |
@@ -23,8 +23,8 @@ Baseline choices were made to keep the protocol usable; these need owner input.
 
 | # | Decision | Baseline chosen | Question |
 |---|---|---|---|
-| 15 | **Evaluation waiver** | Transitional, time-boxed waiver lets the six seed skills be canonical | Does the protocol permit waivers at all? If not, seeds return to `candidate`. |
-| 16 | **`metadata.id` grammar** | Envelope: `[a-z0-9]+([.-][a-z0-9]+)*`; skills: slug only | Shared grammar across registries; is a dot-namespaced form (`research.web-fact-check`) expected for skills? |
+| 15 | **Evaluation exception** | Transitional, expiring protocol exception lets the six seed skills be canonical | Does the protocol permit exceptions at all? If not, seeds return to `candidate`. |
+| 16 | **`metadata.id` grammar** | Shared `[a-z0-9]+([.-][a-z0-9]+)*` (<= 96) for envelope and skills; `SKILL.md` name uses hyphens | Shared grammar across registries; is a dot-namespaced form (`research.web-fact-check`) expected for skills? |
 | 17 | **Classification vocabulary** | `low/moderate/high/critical` for skills | Shared vocabulary (protocol example shows `restricted`)? |
 | 18 | **Vocabularies** | `origin.type`, `evolution.kind`, attestation types are registry-local | Shared enums? |
 | 19 | **Attestation and approval shapes** | Same `{type, ref, subjectDigest}` shape for both | Separate shapes? Who may issue which type? |

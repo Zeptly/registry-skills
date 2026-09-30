@@ -10,7 +10,7 @@ from pathlib import Path
 
 import yaml
 
-from .bundle import PRODUCTION_TIERS, Bundle, cp_key, effective_lifecycle, load_yaml
+from .bundle import PRODUCTION_TIERS, Bundle, RegistryError, cp_key, effective_lifecycle, load_yaml, load_yaml_text
 from .semver import Version, satisfies
 from .validate import Registry
 
@@ -129,8 +129,14 @@ def _entry(reg: Registry, b: Bundle) -> dict:
     ev = "n/a"
     for att in b.manifest["security"]["approvals"]:
         if att["type"] == "governance" and att["ref"].startswith("bundle:"):
-            rec = load_yaml(b.path / att["ref"][7:])
-            ev = "evaluated" if rec.get("basis") == "evaluation" else "unevaluated"  # protocol-exception => unevaluated
+            try:
+                rec = load_yaml(b.path / att["ref"][7:])
+            except RegistryError:
+                rec = None
+            if not isinstance(rec, dict):
+                ev = "unknown"  # unreadable approval record: reported by `zskill validate`
+            else:
+                ev = "evaluated" if rec.get("basis") == "evaluation" else "unevaluated"  # protocol-exception => unevaluated
     return {
         "kind": b.manifest["kind"], "id": b.id, "version": b.version, "digest": b.digest(),
         "directorySeal": b.directory_seal(),
@@ -148,24 +154,38 @@ def _entry(reg: Registry, b: Bundle) -> dict:
 
 
 def index(root: Path, namespace: str = "production") -> dict:
-    """Deterministic derived index. Synthetic artifacts appear ONLY in the synthetic index."""
+    """Deterministic derived index. Synthetic artifacts appear ONLY in the synthetic index.
+
+    Generation FAILS (RegistryError with per-bundle diagnostics) if any bundle of the requested namespace is
+    invalid or unhashable: an index never silently omits an artifact. The result is validated against
+    schemas/registry-index.schema.json before it is returned."""
     reg = Registry(root)
+    issues = reg.run()
     tiers = PRODUCTION_TIERS if namespace == "production" else ("synthetic",)
-    bundles = [b for b in reg.bundles if b.tier in tiers and not b.manifest_error and b.rel in _valid(reg)]
-    # Explicit, locale-independent ordering: id by Unicode code points, then SemVer precedence, then maturity, then digest.
-    entries = sorted((_entry(reg, b) for b in bundles),
+    in_scope = [b for b in reg.bundles if b.tier in tiers]
+    skipped = [b for b in in_scope if b.manifest_error or b.rel not in reg.valid or b.rel in reg.unhashable]
+    if skipped:
+        lines = []
+        for b in skipped:
+            msgs = [i for i in issues if i.level == "error" and (i.where == b.rel or i.where.startswith(b.rel + "/"))]
+            lines.append(f"  {b.rel}: " + ("; ".join(f"{i.where}: [{i.code}] {i.msg}" if i.where != b.rel else f"[{i.code}] {i.msg}" for i in msgs[:5]) if msgs else "invalid"))
+        raise RegistryError(f"cannot generate the {namespace} index: {len(skipped)} bundle(s) are invalid and would be "
+                            "omitted; fix them (see `zskill validate`):\n" + "\n".join(lines))
+    entries = sorted((_entry(reg, b) for b in in_scope),
                      key=lambda e: (cp_key(e["id"]), Version(e["version"]), cp_key(e["maturity"]), cp_key(e["digest"])))
-    return {"apiVersion": API_VERSION, "kind": "RegistryIndex", "registry": "skills", "namespace": namespace, "entries": entries}
-
-
-def _valid(reg: Registry) -> set[str]:
-    if not reg.valid:
-        reg.run()
-    return reg.valid
+    # Explicit, locale-independent ordering: id by Unicode code points, then SemVer precedence, then maturity, then digest.
+    doc = {"apiVersion": API_VERSION, "kind": "RegistryIndex", "registry": "skills", "namespace": namespace, "entries": entries}
+    errs = reg.validate_output("registry-index", doc, f"generated {namespace} index")
+    if errs:
+        raise RegistryError("generated index does not match schemas/registry-index.schema.json:\n  " + "\n  ".join(errs[:10]))
+    return doc
 
 
 def index_text(root: Path, namespace: str = "production") -> str:
-    return json.dumps(index(root, namespace), indent=2) + "\n"
+    try:
+        return json.dumps(index(root, namespace), indent=2, allow_nan=False) + "\n"
+    except ValueError as e:
+        raise RegistryError(f"index cannot be serialized: {e}") from e
 
 
 def index_path(root: Path, namespace: str = "production") -> Path:
@@ -192,8 +212,11 @@ def resolve(root: Path, sid: str, rng: str | None = None) -> dict:
 
     def walk(i, r):
         t = reg.by_id.get(i)
-        if t is None or t.rel not in reg.valid:
-            raise SystemExit(f"unknown or invalid skill {i}")
+        if t is None:
+            raise SystemExit(f"unknown skill {i}")
+        if t.rel not in reg.valid or t.rel in reg.unhashable:
+            why = next((f"{x.where}: [{x.code}] {x.msg}" for x in reg.issues if x.level == "error" and x.where.startswith(t.rel)), "invalid")
+            raise SystemExit(f"cannot resolve {i}: {t.rel} is invalid or unhashable: {why}")
         if i in out:
             return
         v = pick(t, r)
@@ -215,9 +238,13 @@ def resolve(root: Path, sid: str, rng: str | None = None) -> dict:
                                    "requestedBy": i})
     walk(sid, rng)
     unresolved.sort(key=lambda u: (cp_key(u["registry"]), cp_key(u["id"]), cp_key(u["version"]), cp_key(u["requestedBy"])))
-    return {"apiVersion": API_VERSION, "kind": "ResolutionLock",
+    lock = {"apiVersion": API_VERSION, "kind": "ResolutionLock",
             "root": {k: out[sid][k] for k in ("registry", "id", "version", "digest")},
             "resolved": list(out.values()), "unresolved": unresolved}
+    errs = reg.validate_output("resolution-lock", lock, "generated resolution lock")
+    if errs:
+        raise RegistryError("generated lock does not match schemas/resolution-lock.schema.json:\n  " + "\n  ".join(errs[:10]))
+    return lock
 
 
 def ledger_check(root: Path, base: str) -> list[str]:
@@ -229,12 +256,24 @@ def ledger_check(root: Path, base: str) -> list[str]:
             raise SystemExit(f"git ls-tree failed for {base}: {res.stderr.strip()}")
         for name in filter(None, res.stdout.splitlines()):
             show = subprocess.run(["git", "-C", str(root), "show", f"{base}:{name}"], capture_output=True, text=True)
-            old = yaml.safe_load(show.stdout) or {}
+            try:
+                old = load_yaml_text(show.stdout, f"{base}:{name}") or {}
+            except RegistryError as e:
+                problems.append(f"{name}: base version is unreadable: {e}")
+                continue
             cur_p = root / name
             if not cur_p.exists():
                 problems.append(f"{name}: deleted (append-only)")
                 continue
-            old_r, new_r = old.get(key, []), load_yaml(cur_p).get(key, [])
+            try:
+                cur = load_yaml(cur_p)
+            except RegistryError as e:
+                problems.append(f"{name}: {e}")
+                continue
+            if not isinstance(old, dict) or not isinstance(cur, dict):
+                problems.append(f"{name}: expected a mapping document")
+                continue
+            old_r, new_r = old.get(key, []), cur.get(key, [])
             if new_r[: len(old_r)] != old_r:
                 problems.append(f"{name}: existing entries were modified or removed")
     return problems
@@ -336,6 +375,9 @@ cases:
 def scaffold(root: Path, domain: str, name: str, tier: str = "candidates") -> Path:
     if not re.match(r"^[a-z0-9]+([.-][a-z0-9]+)*$", name) or name.startswith("zsk."):
         raise SystemExit("id must be a lowercase dotted/hyphenated slug without the legacy zsk. prefix")
+    known = Registry(root).domains
+    if domain not in known:
+        raise SystemExit(f"unknown domain {domain!r}; valid domains: {', '.join(sorted(known))} (vocab/domains.yaml)")
     d = root / tier / domain / name
     if d.exists():
         raise SystemExit(f"{d} exists")

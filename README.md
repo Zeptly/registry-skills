@@ -53,4 +53,4 @@ Read next: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md), [docs/SPECIFICATION.md]
 
 ## Status
 
-Implements Zeptly Registry Protocol v0.1 (`apiVersion: registry.zeptly.dev/v1alpha1`); see [docs/PROTOCOL-ALIGNMENT.md](docs/PROTOCOL-ALIGNMENT.md) for interpretations needing cross-registry reconciliation. Draft PR only, not merged. The six seed skills ship approved **by waiver** (no executed evals yet); the index reports them as `evidence_level: unevaluated` and CI emits a warning for each until an eval harness produces reports. See [docs/OPEN-DECISIONS.md](docs/OPEN-DECISIONS.md).
+Implements Zeptly Registry Protocol v0.1 (`apiVersion: registry.zeptly.dev/v1alpha1`); see [docs/PROTOCOL-ALIGNMENT.md](docs/PROTOCOL-ALIGNMENT.md) for interpretations needing cross-registry reconciliation. Draft PR only, not merged. The six seed skills are canonical only under an explicit, expiring **temporary protocol exception** (`basis: protocol-exception`, expiry at version 1.1.0; no executed evaluations yet); the index reports them as `evidenceLevel: unevaluated` and CI emits a `protocol-exception` warning for each. See [docs/OPEN-DECISIONS.md](docs/OPEN-DECISIONS.md).

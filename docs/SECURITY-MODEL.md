@@ -2,7 +2,7 @@
 
 Skills can instruct agents to touch external systems, so risk is *declared, validated and reviewed* before a skill becomes canonical. The manifest describes what a skill **needs and does**; the runtime decides what to **grant**. A manifest never grants anything.
 
-## Declared in `security`
+## Declared in `security` (classification, capabilities) and `spec.security_profile` (everything else)
 
 | Field | Values / meaning |
 |---|---|
@@ -20,17 +20,19 @@ Skills can instruct agents to touch external systems, so risk is *declared, vali
 
 * Destructive => classification >= high, HITL required, operations listed.
 * `write`/`delete` permissions imply matching side effects; write-external => >= moderate.
-* Personal/regulated data => >= high (and `security_reviewed_by` at approval); confidential => >= moderate.
+* Personal/regulated data => >= high (and `securityReviewedBy` in the approval record); confidential => >= moderate.
 * Critical => HITL. HITL needs triggers and the confirm capability, and an eval case expecting `hitl-requested`.
 * Network use (web capabilities, MCP/API tools, external effects) must declare egress; `none` may not contradict it; `allowlist` needs domains.
 * Authentication required => methods + runtime-injected credentials.
 * Skills with external effects or classification >= moderate need a `safety` or `adversarial` eval case.
 * Composition cannot hide privilege: a composite's classification, side effects, HITL, sensitivity, permissions, capabilities and egress must cover every child's.
-* Secret scan over every text file (cloud keys, GitHub/Slack/API tokens, private keys, credentialed URLs, assigned secrets).
+* Secret scan over every text file (cloud keys, GitHub/Slack/API tokens, private keys, credentialed URLs, assigned secrets); the scan is linear-time on large files.
+* Bundle contents: explicit filename allow-list; symlinks and unsupported filesystem entries (FIFO, socket, device) are rejected and make seal/digest computation fail; per-file and per-bundle size limits; tape/trace/transcript detection by name and content.
+* Duplicate YAML mapping keys are rejected, so a security block cannot be silently overridden by a later duplicate.
 
 ## Trust and provenance
 
-`trust_tier`: `first-party` (authored/reviewed by Zeptly), `reviewed-third-party` (external, assessed), `unreviewed` (never valid beyond `inspected`). External sources MUST be pinned (ref or digest) before approval. Skills derived from external documents inherit prompt-injection risk: each such skill must state in Guardrails that fetched content is data.
+`spec.trust.tier`: `first-party` (authored/reviewed by Zeptly), `reviewed-third-party` (external, assessed), `unreviewed` (never valid beyond `inspected`). External sources MUST be pinned (ref or digest) before approval. Skills derived from external documents inherit prompt-injection risk: each such skill must state in Guardrails that fetched content is data.
 
 ## Human review
 

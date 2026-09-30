@@ -13,7 +13,7 @@ from jsonschema import Draft202012Validator, FormatChecker
 from referencing import Registry as SchemaRegistry, Resource
 from referencing.jsonschema import DRAFT202012
 
-from .bundle import (Bundle, effective_lifecycle, load_bundles, load_yaml, normalize_text, sha256_hex)
+from .bundle import (Bundle, RegistryError, effective_lifecycle, load_bundles, load_yaml, normalize_text, sha256_hex)
 from .semver import Version, bump_level, satisfies, validate_range
 
 CLASSIFICATIONS = {"low": 0, "moderate": 1, "high": 2, "critical": 3}
@@ -52,6 +52,9 @@ SCHEMA_NAMES = ("envelope", "skill-blueprint", "evidence", "eval-suite", "eval-r
                 "assessment", "release-ledger", "lifecycle-overlay", "registry-index", "resolution-lock")
 
 
+_FAILED = object()  # sentinel: a file could not be loaded (already reported); distinct from an empty document
+
+
 @dataclass(frozen=True)
 class Issue:
     level: str  # error | warning
@@ -64,11 +67,30 @@ class Issue:
 
 
 def load_schemas(root: Path):
-    schemas = {n: load_yaml(root / "schemas" / f"{n}.schema.json") for n in SCHEMA_NAMES}
+    """Load the registry's own JSON Schemas. A broken schema file is a controlled, fatal configuration error."""
+    schemas = {}
+    for n in SCHEMA_NAMES:
+        path = root / "schemas" / f"{n}.schema.json"
+        sch = load_yaml(path)  # YamlError names the file
+        if not isinstance(sch, dict) or not isinstance(sch.get("$id"), str):
+            raise RegistryError(f"{path}: a JSON Schema object with a string $id is required")
+        try:
+            Draft202012Validator.check_schema(sch)
+        except Exception as e:  # noqa: BLE001
+            raise RegistryError(f"{path}: not a valid JSON Schema ({getattr(e, 'message', e)})") from e
+        schemas[n] = sch
     reg = SchemaRegistry()
     for sch in schemas.values():
         reg = reg.with_resource(sch["$id"], Resource.from_contents(sch, default_specification=DRAFT202012))
     return schemas, reg
+
+
+def load_vocab(root: Path, rel: str, key: str) -> set:
+    path = root / rel
+    data = load_yaml(path)
+    if not isinstance(data, dict) or not isinstance(data.get(key), dict):
+        raise RegistryError(f"{path}: expected a mapping with a '{key}' mapping")
+    return set(data[key])
 
 
 class Registry:
@@ -76,9 +98,9 @@ class Registry:
         self.root = root
         self.issues: list[Issue] = []
         self.schemas, self._sreg = load_schemas(root)
-        self.domains = set((load_yaml(root / "vocab/domains.yaml") or {}).get("domains", {}))
-        self.classes = set((load_yaml(root / "vocab/agent-classes.yaml") or {}).get("agent_classes", {}))
-        self.caps = set((load_yaml(root / "vocab/capabilities.yaml") or {}).get("capabilities", {}))
+        self.domains = load_vocab(root, "vocab/domains.yaml", "domains")
+        self.classes = load_vocab(root, "vocab/agent-classes.yaml", "agent_classes")
+        self.caps = load_vocab(root, "vocab/capabilities.yaml", "capabilities")
         self.bundles = load_bundles(root)
         self.by_id: dict[str, Bundle] = {}     # production resolution target (canonical preferred)
         self.canonical: dict[str, Bundle] = {}
@@ -86,6 +108,7 @@ class Registry:
         self.ledgers: dict[str, dict] = {}
         self.overlays: dict[str, dict] = {}
         self.valid: set[str] = set()           # bundles whose manifest passed schema validation
+        self.unhashable: set[str] = set()      # bundles with symlinks/unsupported entries or non-canonicalizable values
 
     # ---- helpers -------------------------------------------------------
     def err(self, where, code, msg):
@@ -102,6 +125,21 @@ class Registry:
             ok = False
         return ok
 
+    def _load(self, path: Path, where: str, code: str):
+        """load_yaml with a controlled diagnostic instead of an exception. Returns _FAILED on failure
+        (an empty document loads as None and is left to schema validation)."""
+        try:
+            return load_yaml(path)
+        except RegistryError as e:
+            self.err(where, code, str(e))
+            return _FAILED
+
+    def validate_output(self, name: str, data, label: str) -> list[str]:
+        """Schema errors (as strings) for a generated artefact (index, resolution lock); empty when valid."""
+        v = Draft202012Validator(self.schemas[name], registry=self._sreg, format_checker=FormatChecker())
+        return [f"{label}: {'/'.join(map(str, e.path)) or '<root>'}: {e.message}"
+                for e in sorted(v.iter_errors(data), key=lambda e: list(map(str, e.path)))]
+
     def released_versions(self, skill_id: str) -> list[str]:
         return [r["version"] for r in (self.ledgers.get(skill_id) or {}).get("releases", [])]
 
@@ -113,12 +151,14 @@ class Registry:
         self.check_ledgers()
         self.check_overlays()
         seen: dict[tuple, Bundle] = {}
+        orphans: list[Bundle] = []
         for b in self.bundles:
             if b.manifest_error:
                 self.err(b.rel, "manifest-parse", b.manifest_error)
                 continue
             if not (b.id and b.version):
-                continue  # schema check reports it
+                orphans.append(b)  # still schema-checked below: a manifest without id/version must not vanish silently
+                continue
             key = (b.id, b.version)
             if key in seen:
                 self.err(b.rel, "duplicate-id", f"{b.id}@{b.version} also defined by {seen[key].rel}")
@@ -137,7 +177,7 @@ class Registry:
         self.synthetic_ids = {b.id for b in seen.values() if b.tier == "synthetic"}
         for sid in self.synthetic_ids & set(self.by_id):
             self.err(f"synthetic/{sid}", "synthetic-collision", f"synthetic id {sid} collides with a production id")
-        for b in seen.values():
+        for b in [*seen.values(), *orphans]:
             self.check_bundle(b)
         for b in seen.values():
             self.check_references(b)
@@ -220,6 +260,7 @@ class Registry:
         if not self.schema_check("skill-blueprint", m, w + "/manifest.yaml", "manifest-schema"):
             return
         self.valid.add(b.rel)
+        self.check_hashable(b)
         meta, spec = m["metadata"], m["spec"]
         parts = b.path.relative_to(b.root).parts  # tier/domain/name
         if meta["id"] != parts[2]:
@@ -236,9 +277,32 @@ class Registry:
         self.check_evals(b)
         self.check_files(b)
         self.check_evidence(b)
+        if b.rel in self.unhashable:
+            return  # digest-dependent checks (attestations, release ledger) cannot run; the cause is reported above
         self.check_attestations(b)
         if b.tier == "skills":
             self.check_release(b)
+
+    def check_hashable(self, b: Bundle):
+        """Symlinks, unsupported entries and non-canonicalizable values make a bundle unhashable: report them
+        explicitly and keep every digest-dependent check away from the bundle (never a silent partial digest)."""
+        bad = b.invalid_entries()
+        for rel, kind in bad:
+            where = rel
+            if kind == "symlink":
+                self.err(where, "symlink", "symlinks are not allowed in bundles (never followed, never hashed)")
+            elif kind == "unreadable":
+                self.err(where, "unreadable-entry", "entry could not be listed or read")
+            else:
+                self.err(where, "unsupported-entry", "not a regular file or directory (FIFO, socket, device, ...); not allowed in bundles")
+        if bad:
+            self.unhashable.add(b.rel)
+            return
+        try:
+            b.digest(), b.contract_digest(), b.security_digest()
+        except RegistryError as e:
+            self.err(b.rel + "/manifest.yaml", "canonicalization", str(e))
+            self.unhashable.add(b.rel)
 
     def check_state_model(self, b: Bundle):
         """maturity, origin and lifecycle are independent fields; location must agree with maturity."""
@@ -246,9 +310,11 @@ class Registry:
         want = TIER_MATURITY[b.tier]
         if meta["maturity"] != want:
             self.err(w, "maturity-location", f"maturity {meta['maturity']!r} but artifact lives under {b.tier}/ (expects {want!r})")
-        stage = b.stage()
+        stage, stage_err = b.stage_with_error()
+        if stage_err:
+            self.err(w, "stage-parse", stage_err)
         if meta["maturity"] == "candidate":
-            if stage is None:
+            if stage is None and not stage_err:
                 self.err(w, "stage-missing", "candidate artifacts require provenance/stage.yaml with a valid stage")
             elif stage not in STAGES:
                 self.err(w, "stage-invalid", f"stage {stage!r} not in {list(STAGES)}")
@@ -277,9 +343,9 @@ class Registry:
 
     def check_skill_md(self, b: Bundle):
         w, spec = b.rel + "/SKILL.md", b.spec
-        fm, body = b.skill_md()
+        fm, body, problem = b.skill_md_full()
         if fm is None:
-            self.err(w, "skillmd-frontmatter", "SKILL.md missing or lacks valid YAML frontmatter (--- ... ---)")
+            self.err(w, "skillmd-frontmatter", problem or "SKILL.md missing or lacks valid YAML frontmatter (--- ... ---)")
             return
         portable = b.id.replace(".", "-")  # Agent Skills names are lowercase-hyphen only
         if fm.get("name") != portable:
@@ -411,8 +477,8 @@ class Registry:
                 if not ap.is_file():
                     self.err(w, "prov-assessment-missing", f"assessment file {rel} not found")
                 else:
-                    data = load_yaml(ap)
-                    if self.schema_check("assessment", data, f"{b.rel}/{rel}", "assessment-schema"):
+                    data = self._load(ap, f"{b.rel}/{rel}", "assessment-parse")
+                    if data is not _FAILED and self.schema_check("assessment", data, f"{b.rel}/{rel}", "assessment-schema"):
                         if data["verdict"] in ("reject", "needs-more-inspection") and (promoted or stage in ("drafted", "evaluating")):
                             self.err(w, "prov-verdict", f"assessment verdict {data['verdict']!r} blocks stage {stage or 'canonical'!r}")
                         if data["verdict"] == "proceed-with-restrictions" and not data.get("restrictions"):
@@ -431,8 +497,8 @@ class Registry:
         if not sp.is_file():
             self.err(w, "eval-missing", f"eval suite {spec['evaluation']['suite']} not found")
             return
-        data = load_yaml(sp)
-        if not self.schema_check("eval-suite", data, f"{b.rel}/{spec['evaluation']['suite']}", "eval-schema"):
+        data = self._load(sp, f"{b.rel}/{spec['evaluation']['suite']}", "eval-parse")
+        if data is _FAILED or not self.schema_check("eval-suite", data, f"{b.rel}/{spec['evaluation']['suite']}", "eval-schema"):
             return
         if data["skill"] != b.id:
             self.err(w, "eval-skill", f"suite.skill {data['skill']!r} != metadata.id {b.id!r}")
@@ -453,8 +519,6 @@ class Registry:
 
     def check_files(self, b: Bundle):
         """Explicit filename allow-list, no symlinks, size limits, no runtime tapes/traces/transcripts, no secrets."""
-        for link in b.symlinks():
-            self.err(f"{b.rel}/{link.relative_to(b.path).as_posix()}", "symlink", "symlinks are not allowed in bundles (never followed, never hashed)")
         files = b.files()
         if len(files) > MAX_BUNDLE_FILES:
             self.err(b.rel, "bundle-too-many-files", f"{len(files)} files exceeds {MAX_BUNDLE_FILES}")
@@ -516,15 +580,21 @@ class Registry:
 
     def _load_evidence(self, b: Bundle):
         p = b.path / "provenance" / "evidence.yaml"
-        return load_yaml(p) if p.exists() else None
+        if not p.exists():
+            return None
+        try:
+            data = load_yaml(p)
+        except RegistryError:
+            return None  # reported by check_evidence
+        return data if isinstance(data, dict) and isinstance(data.get("refs"), list) else None
 
     def check_evidence(self, b: Bundle):
         p = b.path / "provenance" / "evidence.yaml"
         if not p.exists():
             return
         w = f"{b.rel}/provenance/evidence.yaml"
-        data = load_yaml(p)
-        if not self.schema_check("evidence", data, w, "evidence-schema"):
+        data = self._load(p, w, "evidence-parse")
+        if data is _FAILED or not self.schema_check("evidence", data, w, "evidence-schema"):
             return
         if data["subject"]["id"] != b.id:
             self.err(w, "evidence-skill", "evidence.subject.id must be this skill")
@@ -551,7 +621,13 @@ class Registry:
             if ".." in Path(rel).parts or not str(fp).startswith(str(b.path.resolve())) or not fp.is_file():
                 self.err(where, "attestation-ref", f"{att['ref']} does not resolve to a file inside the bundle")
                 return None
-            return load_yaml(fp)
+            rec = self._load(fp, f"{b.rel}/{rel}", "attestation-parse")
+            if rec is _FAILED:
+                return None
+            if not isinstance(rec, dict):
+                self.err(f"{b.rel}/{rel}", "attestation-parse", "attestation record must be a mapping (document is empty or not a mapping)")
+                return None
+            return rec
         return None  # evidence:// pointers are opaque here (Evidence Protocol deferred)
 
     def check_attestations(self, b: Bundle):
@@ -598,7 +674,12 @@ class Registry:
             if not ex:
                 self.err(aw, "approval-exception", "basis protocol-exception requires an exception block")
                 return
-            if Version(b.version) >= Version(ex["expiresOnVersion"]):
+            try:
+                expires = Version(ex["expiresOnVersion"])
+            except ValueError:
+                self.err(aw, "exception-version", f"expiresOnVersion {ex['expiresOnVersion']!r} is not a valid SemVer version")
+                return
+            if Version(b.version) >= expires:
                 self.err(aw, "exception-expired", f"protocol exception expired at {ex['expiresOnVersion']}; executed evaluations required")
             else:
                 self.warn(aw, "protocol-exception",
@@ -668,7 +749,7 @@ class Registry:
                 self.err(w, "ref-version", f"no available version of {r['id']} satisfies {r['version']} (available: {sorted(avail)})")
             if r.get("digest") and ok:
                 rel = next((x for x in (self.ledgers.get(t.id) or {}).get("releases", []) if x["version"] == r["version"]), None)
-                pinned = rel["digest"] if rel else (t.digest() if t.version == r["version"] else None)
+                pinned = rel["digest"] if rel else (t.digest() if t.version == r["version"] and t.rel not in self.unhashable else None)
                 if pinned and pinned != r["digest"]:
                     self.err(w, "ref-digest", f"{r['id']}@{r['version']} digest {r['digest'][:19]}... does not match registry digest {pinned[:19]}...")
         if b.tier == "synthetic":
